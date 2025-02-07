@@ -1,0 +1,16 @@
+{
+  "cSpell.words": [
+    "anytype",
+    "callconv",
+    "comptime",
+    "linksection",
+    "memcpy",
+    "memset",
+    "movl",
+    "multiboot",
+    "noreturn",
+    "outb",
+    "putc",
+    "usize"
+  ]
+}

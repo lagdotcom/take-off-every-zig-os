@@ -22,16 +22,16 @@ const stack_bytes_slice = stack_bytes[0..];
 
 export fn _start() callconv(.Naked) noreturn {
     asm volatile (
-        \\ movl %[stk], %esp
+        \\ movl %[stack_top], %esp
         \\ movl %esp, %ebp
-        \\ call kmain
+        \\ call kernel_main
         :
-        : [stk] "{ecx}" (@intFromPtr(&stack_bytes_slice) + @sizeOf(@TypeOf(stack_bytes_slice))),
+        : [stack_top] "{ecx}" (@intFromPtr(&stack_bytes_slice) + @sizeOf(@TypeOf(stack_bytes_slice))),
     );
     while (true) {}
 }
 
-export fn kmain() void {
+export fn kernel_main() void {
     console.initialize();
     console.puts("Hello Zig Kernel!");
 }

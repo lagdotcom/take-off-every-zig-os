@@ -65,9 +65,9 @@ fn new_line() void {
     if (row == VGA_HEIGHT) scroll_down();
 }
 
-fn put_char_at(c: u8, new_color: u8, x: usize, y: usize) void {
+fn put_char_at(c: u8, new_colour: u8, x: usize, y: usize) void {
     const index = y * VGA_WIDTH + x;
-    buffer[index] = vga_entry(c, new_color);
+    buffer[index] = vga_entry(c, new_colour);
 }
 
 pub fn putc(c: u8) void {
