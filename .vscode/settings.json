@@ -10,6 +10,9 @@
     "multiboot",
     "noreturn",
     "outb",
+    "outl",
+    "outw",
+    "prefetchable",
     "putc",
     "usize"
   ]

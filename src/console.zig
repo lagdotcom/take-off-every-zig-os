@@ -2,8 +2,6 @@ const fmt = @import("std").fmt;
 const Writer = @import("std").io.Writer;
 
 const utils = @import("utils.zig");
-const inb = utils.inb;
-const outb = utils.outb;
 
 const VGA_WIDTH = 80;
 const VGA_HEIGHT = 25;
@@ -59,7 +57,7 @@ pub fn clear() void {
     move_hardware_cursor();
 }
 
-fn new_line() void {
+pub fn new_line() void {
     column = 0;
     row += 1;
     if (row == VGA_HEIGHT) scroll_down();
@@ -101,10 +99,10 @@ pub fn printf(comptime format: []const u8, args: anytype) void {
 
 fn move_hardware_cursor() void {
     const position = row * 80 + column;
-    outb(0x3D4, 0x0F);
-    outb(0x3D5, @truncate(position));
-    outb(0x3D4, 0x0E);
-    outb(0x3D5, @truncate(position >> 8));
+    utils.outb(0x3D4, 0x0F);
+    utils.outb(0x3D5, @truncate(position));
+    utils.outb(0x3D4, 0x0E);
+    utils.outb(0x3D5, @truncate(position >> 8));
 }
 
 fn scroll_down() void {
@@ -115,5 +113,11 @@ fn scroll_down() void {
     @memset(buffer[last..VGA_SIZE], vga_entry(' ', colour));
 
     row -= 1;
+    move_hardware_cursor();
+}
+
+pub fn goto(x: u16, y: u16) void {
+    column = x;
+    row = y;
     move_hardware_cursor();
 }
