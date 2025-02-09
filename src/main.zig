@@ -1,7 +1,46 @@
+const builtin = @import("builtin");
+const std = @import("std");
+
 const console = @import("console.zig");
 const keyboard = @import("keyboard.zig");
+const kernel_log = @import("log.zig");
 const pci = @import("pci.zig");
+const serial = @import("serial.zig");
 const utils = @import("utils.zig");
+
+pub const os = @import("os.zig");
+
+pub fn kernel_log_fn(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    kernel_log.write(level, "(" ++ @tagName(scope) ++ "): " ++ format, args);
+}
+
+// TODO figure out how to swap this automatically depending on builtin.zig_version.major
+// version 12+
+pub const std_options = .{
+    .log_level = .debug,
+    .logFn = kernel_log_fn,
+};
+// before that
+// pub const std_options = struct {
+//     pub const log_level = .debug;
+//     pub const logFn = kernel_log_fn;
+// };
+
+// Define root.panic to override the std implementation
+pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    @setCold(true);
+
+    _ = error_return_trace;
+    _ = ret_addr;
+    kernel_log_fn(.err, .kernel, "!panic! {s}", .{msg});
+
+    while (true) {}
+}
 
 const ALIGN = 1 << 0;
 const MEMINFO = 1 << 1;
@@ -34,80 +73,15 @@ export fn _start() callconv(.Naked) noreturn {
     while (true) {}
 }
 
-fn show_pci_device_info(bus: u8, slot: u5, function: u3) void {
-    if (pci.get_device_header(bus, slot, function)) |h| {
-        console.printf("Vendor/Device ID: {x:0>4}:{x:0>4} ({s})\n", .{ h.vendor_id, h.device_id, pci.get_vendor_name(h.vendor_id) });
-        console.printf("Class: {x}:{x}\n", .{ h.class_code, h.subclass });
-        console.printf("Command: {b:0>16}\nStatus: {b:0>16}\n", .{ h.command, h.status });
-        console.printf("Revision ID: {x}\nProg IF: {x}\n", .{ h.revision_id, h.prog_if });
-        console.printf("Cache Line Size: {x}\nLatency Timer: {x}\n", .{ h.cache_line_size, h.latency_timer });
-        console.printf("Header Type: {x}\nBIST: {x}\n", .{ h.header_type, h.bist });
-
-        if (h.general) |g| {
-            console.printf("BAR: {x} {x} {x} {x} {x} {x}\n", .{ g.base_address_registers[0], g.base_address_registers[1], g.base_address_registers[2], g.base_address_registers[3], g.base_address_registers[4], g.base_address_registers[5] });
-            console.printf("CardBus CIS Pointer: {x}\n", .{g.card_bus_cis_pointer});
-            console.printf("Subsystem Vendor ID: {x}\nSubsystem ID: {x}\n", .{ g.subsystem_vendor_id, g.subsystem_id });
-            console.printf("Expansion ROM Base Address: {x}\n", .{g.expansion_rom_base_address});
-            console.printf("Capabilities Pointer: {x}\n", .{g.capabilities_pointer});
-            console.printf("Interrupt Line: {x} / Pin: {x}\n", .{ g.interrupt_line, g.interrupt_pin });
-            console.printf("Min Grant: {x}\nMax Latency: {x}\n", .{ g.min_grant, g.max_latency });
-        }
-    }
-}
-
-fn show_pci_brief(bus: usize, slot: usize, function: usize, h: pci.DeviceHeader) void {
-    console.printf("At {d}:{d}:{d} - {x:0>4}:{x:0>4} ({s}) - {s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, pci.get_vendor_name(h.vendor_id), pci.get_device_class(h.class_code, h.subclass) });
-}
-
-fn check_pci_function(bus: u8, slot: u5, function: u3) void {
-    if (pci.get_device_header(bus, slot, function)) |h| {
-        show_pci_brief(@intCast(bus), @intCast(slot), @intCast(function), h);
-
-        if (h.pci_to_pci_bridge) |p| {
-            enumerate_pci_bus(p.secondary_bus_number);
-        }
-    }
-}
-
-fn check_pci_device(bus: u8, slot: u5) void {
-    if (pci.get_device_header(bus, slot, 0)) |h| {
-        show_pci_brief(@intCast(bus), @intCast(slot), 0, h);
-
-        if ((h.header_type & 0x80) != 0) {
-            for (1..8) |function| {
-                check_pci_function(bus, slot, @intCast(function));
-            }
-        }
-    }
-}
-
-fn enumerate_pci_bus(bus: u8) void {
-    for (0..32) |slot| {
-        check_pci_device(bus, @intCast(slot));
-    }
-}
-
-fn enumerate_pci_buses() void {
-    for (0..256) |bus| {
-        enumerate_pci_bus(@intCast(bus));
-    }
-}
-
-fn brute_force_pci_devices() void {
-    for (0..256) |bus| {
-        for (0..32) |slot| {
-            for (0..8) |function| {
-                if (pci.get_device_header(@intCast(bus), @intCast(slot), @intCast(function))) |h| {
-                    show_pci_brief(bus, slot, function, h);
-                }
-            }
-        }
-    }
-}
-
 export fn kernel_main() callconv(.C) void {
+    const com1 = serial.initialize(serial.COM1) catch unreachable;
+    kernel_log.initialize(com1);
+
     console.initialize();
     console.puts("Hello Zig Kernel!\n\n");
 
-    enumerate_pci_buses();
+    keyboard.report_status();
+    keyboard.set_leds(true, true, true);
+
+    pci.enumerate_buses();
 }

@@ -1,17 +1,21 @@
-const fmt = @import("std").fmt;
-const Writer = @import("std").io.Writer;
+const std = @import("std");
+const log = std.log.scoped(.pci);
 
 const console = @import("console.zig");
 const utils = @import("utils.zig");
 
-const CONFIG_ADDRESS: u16 = 0xcf8;
-const CONFIG_DATA: u16 = 0xcfc;
+const CONFIG_ADDRESS = 0xcf8;
+const CONFIG_DATA = 0xcfc;
+
+pub const PCIBus = u8;
+pub const PCISlot = u5;
+pub const PCIFunction = u3;
 
 pub const ConfigAddress = packed struct {
     register_offset: u8,
-    function_number: u3,
-    device_number: u5,
-    bus_number: u8,
+    function_number: PCIFunction,
+    device_number: PCISlot,
+    bus_number: PCIBus,
     reserved: u7,
     enable_bit: bool,
 };
@@ -25,7 +29,7 @@ pub fn config_read_long(addr: ConfigAddress) u32 {
     return utils.inl(CONFIG_DATA);
 }
 
-pub fn get_device_config(bus: u8, slot: u5, function: u3, offset: u8) u32 {
+pub fn get_device_config(bus: PCIBus, slot: PCISlot, function: PCIFunction, offset: u8) u32 {
     return config_read_long(ConfigAddress{
         .register_offset = offset,
         .function_number = function,
@@ -41,7 +45,7 @@ pub const DeviceID = struct {
     device_id: u16,
 };
 
-pub fn get_device_id(bus: u8, slot: u5) ?DeviceID {
+pub fn get_device_id(bus: PCIBus, slot: PCISlot) ?DeviceID {
     const long0 = get_device_config(bus, slot, 0);
     const vendor_id: u16 = @intCast(long0 & 0xffff);
     if (vendor_id == 0xffff) {
@@ -109,7 +113,7 @@ pub const PCIToPCIBridgeHeader = struct {
     bridge_control: u16,
 };
 
-pub fn get_device_header(bus: u8, slot: u5, function: u3) ?DeviceHeader {
+pub fn get_device_header(bus: PCIBus, slot: PCISlot, function: PCIFunction) ?DeviceHeader {
     const long0 = get_device_config(bus, slot, function, 0);
 
     const vendor_id: u16 = @intCast(long0 & 0xffff);
@@ -332,7 +336,7 @@ pub fn get_device_class(class_code: u8, subclass: u8) []const u8 {
     };
 }
 
-pub fn get_general_device_header(bus: u8, slot: u5, function: u3) GeneralDeviceHeader {
+pub fn get_general_device_header(bus: PCIBus, slot: PCISlot, function: PCIFunction) GeneralDeviceHeader {
     const bar0 = get_device_config(bus, slot, function, 0x10);
     const bar1 = get_device_config(bus, slot, function, 0x14);
     const bar2 = get_device_config(bus, slot, function, 0x18);
@@ -386,7 +390,7 @@ pub fn get_vendor_name(vendor_id: u16) []const u8 {
     };
 }
 
-pub fn get_pci_to_pci_bridge_header(bus: u8, slot: u5, function: u3) PCIToPCIBridgeHeader {
+pub fn get_pci_to_pci_bridge_header(bus: PCIBus, slot: PCISlot, function: PCIFunction) PCIToPCIBridgeHeader {
     const bar0 = get_device_config(bus, slot, function, 0x10);
     const bar1 = get_device_config(bus, slot, function, 0x14);
 
@@ -453,4 +457,79 @@ pub fn get_pci_to_pci_bridge_header(bus: u8, slot: u5, function: u3) PCIToPCIBri
         .interrupt_pin = interrupt_pin,
         .bridge_control = bridge_control,
     };
+}
+
+fn show_full_device_info(bus: usize, slot: usize, function: usize, h: DeviceHeader) void {
+    log.debug("Location: {d}:{d}:{d}", .{ bus, slot, function });
+    log.debug("Vendor/Device ID: {x:0>4}:{x:0>4} ({s})", .{ h.vendor_id, h.device_id, get_vendor_name(h.vendor_id) });
+    log.debug("Class: {x}:{x} ({s})", .{ h.class_code, h.subclass, get_device_class(h.class_code, h.subclass) });
+    log.debug("Command: {b:0>16} -- Status: {b:0>16}", .{ h.command, h.status });
+    log.debug("Revision ID: {x} -- Prog IF: {x}", .{ h.revision_id, h.prog_if });
+    log.debug("Cache Line Size: {x} -- Latency Timer: {x}", .{ h.cache_line_size, h.latency_timer });
+    log.debug("Header Type: {x} -- BIST: {x}", .{ h.header_type, h.bist });
+
+    if (h.general) |g| {
+        log.debug("BAR: {x} {x} {x} {x} {x} {x}", .{ g.base_address_registers[0], g.base_address_registers[1], g.base_address_registers[2], g.base_address_registers[3], g.base_address_registers[4], g.base_address_registers[5] });
+        log.debug("CardBus CIS Pointer: {x}", .{g.card_bus_cis_pointer});
+        log.debug("Subsystem Vendor ID: {x} -- Subsystem ID: {x}", .{ g.subsystem_vendor_id, g.subsystem_id });
+        log.debug("Expansion ROM Base Address: {x}", .{g.expansion_rom_base_address});
+        log.debug("Capabilities Pointer: {x}", .{g.capabilities_pointer});
+        log.debug("Interrupt Line: {x} / Pin: {x}", .{ g.interrupt_line, g.interrupt_pin });
+        log.debug("Min Grant: {x} -- Max Latency: {x}", .{ g.min_grant, g.max_latency });
+    }
+}
+
+fn show_brief_device_info(bus: usize, slot: usize, function: usize, h: DeviceHeader) void {
+    console.printf("At {d}:{d}:{d} - {x:0>4}:{x:0>4} ({s}) - {s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, get_vendor_name(h.vendor_id), get_device_class(h.class_code, h.subclass) });
+}
+
+fn show_device_info(bus: PCIBus, slot: PCISlot, function: PCIFunction, h: DeviceHeader) void {
+    show_brief_device_info(bus, slot, function, h);
+    show_full_device_info(bus, slot, function, h);
+}
+
+fn check_function(bus: PCIBus, slot: PCISlot, function: PCIFunction) void {
+    if (get_device_header(bus, slot, function)) |h| {
+        show_device_info(bus, slot, function, h);
+
+        if (h.pci_to_pci_bridge) |p| {
+            enumerate_bus(p.secondary_bus_number);
+        }
+    }
+}
+
+fn check_device(bus: PCIBus, slot: PCISlot) void {
+    if (get_device_header(bus, slot, 0)) |h| {
+        show_device_info(bus, slot, 0, h);
+
+        if ((h.header_type & 0x80) != 0) {
+            for (1..8) |function| {
+                check_function(bus, slot, @intCast(function));
+            }
+        }
+    }
+}
+
+fn enumerate_bus(bus: PCIBus) void {
+    for (0..32) |slot| {
+        check_device(bus, @intCast(slot));
+    }
+}
+
+pub fn enumerate_buses() void {
+    for (0..256) |bus| {
+        enumerate_bus(@intCast(bus));
+    }
+}
+
+pub fn brute_force_devices() void {
+    for (0..256) |bus| {
+        for (0..32) |slot| {
+            for (0..8) |function| {
+                if (get_device_header(@intCast(bus), @intCast(slot), @intCast(function))) |h| {
+                    show_device_info(bus, slot, function, h);
+                }
+            }
+        }
+    }
 }

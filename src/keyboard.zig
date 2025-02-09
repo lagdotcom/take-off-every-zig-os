@@ -8,11 +8,7 @@ pub const LEDState = packed struct {
     scroll_lock: bool,
     number_lock: bool,
     caps_lock: bool,
-
-    const Self = @This();
-    pub fn as_u8(self: Self) u8 {
-        return @bitCast(self);
-    }
+    unused: u5,
 };
 
 pub const StatusRegister = packed struct {
@@ -49,7 +45,7 @@ pub fn report_status() void {
     console.new_line();
 }
 
-pub fn set_leds(state: LEDState) void {
+pub fn set_leds(scroll_lock: bool, number_lock: bool, caps_lock: bool) void {
     utils.outb(PS2_COMMAND_PORT, 0xED);
-    utils.outb(PS2_DATA_PORT, state.as_u8());
+    utils.outb(PS2_DATA_PORT, @bitCast(LEDState{ .scroll_lock = scroll_lock, .number_lock = number_lock, .caps_lock = caps_lock, .unused = 0 }));
 }
