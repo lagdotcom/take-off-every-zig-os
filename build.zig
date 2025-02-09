@@ -48,6 +48,8 @@ pub fn build(b: *std.Build) void {
 
     const qemu_cmd = b.addSystemCommand(&.{
         "qemu-system-i386",
+        // "-cpu",
+        // "486",
         "-serial",
         "stdio",
         // "file:qemu-serial.log",

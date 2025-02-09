@@ -1,7 +1,10 @@
 const builtin = @import("builtin");
 const std = @import("std");
+const log = std.log.scoped(.kmain);
 
 const console = @import("console.zig");
+const cpuid = @import("cpuid.zig");
+const gdt = @import("gdt.zig");
 const keyboard = @import("keyboard.zig");
 const kernel_log = @import("log.zig");
 const pci = @import("pci.zig");
@@ -77,8 +80,12 @@ export fn kernel_main() callconv(.C) void {
     const com1 = serial.initialize(serial.COM1) catch unreachable;
     kernel_log.initialize(com1);
 
+    gdt.initialize();
+
     console.initialize();
     console.puts("Hello Zig Kernel!\n\n");
+
+    cpuid.initialize();
 
     keyboard.report_status();
     keyboard.set_leds(true, true, true);

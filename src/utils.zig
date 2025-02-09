@@ -46,3 +46,41 @@ pub inline fn outl(port: u16, value: u32) void {
 pub inline fn cli() void {
     asm volatile ("cli");
 }
+
+pub const CPUIDRequest = enum(u32) {
+    get_vendor_id_string,
+    get_features,
+    get_tlb,
+    get_serial,
+
+    intel_extended = 0x80000000,
+    intel_features,
+    intel_brand_string,
+    intel_brand_string_more,
+    intel_brand_string_end,
+};
+
+pub const CPUIDResults = struct {
+    a: u32,
+    b: u32,
+    c: u32,
+    d: u32,
+};
+
+pub inline fn cpuid(code: CPUIDRequest) CPUIDResults {
+    var a: u32 = undefined;
+    var b: u32 = undefined;
+    var c: u32 = undefined;
+    var d: u32 = undefined;
+
+    asm volatile ("cpuid"
+        : [a] "={eax}" (a),
+          [b] "={ebx}" (b),
+          [c] "={ecx}" (c),
+          [d] "={edx}" (d),
+        : [code] "{eax}" (code),
+        : "ebx", "ecx"
+    );
+
+    return .{ .a = a, .b = b, .c = c, .d = d };
+}
