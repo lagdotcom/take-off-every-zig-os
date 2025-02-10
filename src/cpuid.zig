@@ -41,13 +41,13 @@ pub fn vendor_string_4(res: utils.CPUIDResults) [16]u8 {
     };
 }
 
-fn show_vendor() void {
+fn show_vendor() Manufacturer {
     const result = utils.cpuid(.get_vendor_id_string);
     const vendor = vendor_string_3(result);
     console.printf("CPUID: {s} ({d}fn)", .{ vendor, result.a });
 
     const extended_result = utils.cpuid(.intel_extended);
-    if (extended_result.a > 0x80000000) {
+    if (extended_result.a >= @intFromEnum(utils.CPUIDRequest.intel_brand_string_end)) {
         const brand0 = vendor_string_4(utils.cpuid(.intel_brand_string));
         const brand1 = vendor_string_4(utils.cpuid(.intel_brand_string_more));
         const brand2 = vendor_string_4(utils.cpuid(.intel_brand_string_end));
@@ -56,6 +56,7 @@ fn show_vendor() void {
     }
 
     console.new_line();
+    return guess_manufacturer(vendor);
 }
 
 const EAXType = enum(u2) {
@@ -153,44 +154,206 @@ const EDXFeatures = packed struct {
     pbe: bool,
 };
 
-fn guess_cpu(a: EAXFeatures) []const u8 {
-    return switch (a.family) {
-        3 => "80386",
-        4 => switch (a.model) {
-            1 => "80486DX",
-            2 => "80486SX",
-            3 => "80486DX2",
-            4 => "80486SL",
-            8 => "80486DX4",
-            else => "80486",
+const Manufacturer = enum {
+    Intel,
+    AMD,
+    Cyrix,
+    Centaur,
+    NexGen,
+    Transmeta,
+    Rise,
+    UMC,
+    SiS,
+    NSC,
+    Other,
+};
+
+fn guess_manufacturer(vendor: [12]u8) Manufacturer {
+    if (std.mem.eql(u8, &vendor, "GenuineIntel")) return .Intel;
+    if (std.mem.eql(u8, &vendor, "AuthenticAMD")) return .AMD;
+    if (std.mem.eql(u8, &vendor, "CyrixInstead")) return .Cyrix;
+    if (std.mem.eql(u8, &vendor, "CentaurHauls")) return .Centaur;
+    if (std.mem.eql(u8, &vendor, "NexGenDriven")) return .NexGen;
+    if (std.mem.eql(u8, &vendor, "GenuineTMx86")) return .Transmeta;
+    if (std.mem.eql(u8, &vendor, "RiseRiseRise")) return .Rise;
+    if (std.mem.eql(u8, &vendor, "UMC UMC UMC ")) return .UMC;
+    if (std.mem.eql(u8, &vendor, "SiS SiS SiS ")) return .SiS;
+    if (std.mem.eql(u8, &vendor, "Geode by NSC")) return .NSC;
+    return .Other;
+}
+
+fn guess_cpu(mfc: Manufacturer, a: EAXFeatures) []const u8 {
+    return switch (mfc) {
+        .Intel => switch (a.family) {
+            3 => "386",
+            4 => switch (a.model) {
+                0 => "486DX-25/33",
+                1 => "486DX-50",
+                2 => "486SX",
+                3 => "486DX/2",
+                4 => "486SL",
+                5 => "486SX/2",
+                7 => "486DX/2-WB",
+                8 => "486DX/4",
+                9 => "486DX/4-WB",
+                else => "Unknown 486",
+            },
+            5 => switch (a.model) {
+                0 => "Pentium 60/66 A-step",
+                1 => "Pentium 60/66",
+                2 => "Pentium 75 - 200",
+                3 => "OverDrive PODP5V83",
+                4 => "Pentium MMX",
+                7 => "Mobile Pentium 75 - 200",
+                8 => "Mobile Pentium MMX",
+                9 => "X1000/D1000",
+                else => "Unknown Pentium",
+            },
+            6 => switch (a.model_extended) {
+                0 => switch (a.model) {
+                    0 => "Pentium Pro A-step",
+                    1 => "Pentium Pro",
+                    3 => "PII Klamath",
+                    5 => "PII Deschutes / Celeron Covington / Mobile PII Dixon",
+                    6 => "Mobile PII / Celeron Mendocino",
+                    7 => "PIII Katmai",
+                    8 => "PIII Coppermine/T",
+                    9 => "Mobile Pentium III",
+                    0xA => "PIII (0.18µm)",
+                    0xB => "PIII (0.13µm)",
+                    0xD => "Dothan",
+                    0xE => "Yonah",
+                    0xF => "Merom",
+                    else => "Unknown PII/III",
+                },
+                1 => switch (a.model) {
+                    5 => "Tolapai",
+                    6 => "Merom L",
+                    7 => "Penryn/Wolfdale/Yorkfield",
+                    0xE => "Clarksfield",
+                    0xF => "Auburndale/Havendale",
+                    else => "Unknown P6.1",
+                },
+                2 => switch (a.model) {
+                    5 => "Arrandale/Clarkdale",
+                    0xA => "Sandy Bridge M/H/Celeron",
+                    else => "Unknown P6.2",
+                },
+                3 => switch (a.model) {
+                    0xA => "Ivy Bridge M/H/Gladden",
+                    0xC => "Haswell S",
+                    0xD => "Broadwell U/Y/S",
+                    else => "Unknown P6.3",
+                },
+                4 => switch (a.model) {
+                    5 => "Haswell ULT",
+                    6 => "Haswell GT3E",
+                    7 => "Broadwell H/C/W",
+                    0xE => "Skylake Y/U",
+                    else => "Unknown P6.4",
+                },
+                5 => switch (a.model) {
+                    0xE => "Skylake DT/H/S",
+                    else => "Unknown P6.5",
+                },
+                6 => switch (a.model) {
+                    6 => "Cannon Lake U",
+                    else => "Unknown P6.6",
+                },
+                7 => switch (a.model) {
+                    0xE => "Ice Lake Y/U",
+                    else => "Unknown P6.7",
+                },
+                8 => switch (a.model) {
+                    0xC => "Tiger Lake U",
+                    0xD => "Tiger Lake H",
+                    0xE => "Kaby/Coffee/Whiskey/Amber/Comet Lake Y/U",
+                    else => "Unknown P6.8",
+                },
+                9 => switch (a.model) {
+                    7 => "Gracemont E/S",
+                    0xA => "Golden Cove P",
+                    0xE => "Kaby/Coffee Lake DT/H/S/X/E",
+                    else => "Unknown P6.9",
+                },
+                0xA => switch (a.model) {
+                    5 => "Comet Lake S/H",
+                    7 => "Cypress Cove S",
+                    else => "Unknown P6.10",
+                },
+                0xB => switch (a.model) {
+                    7 => "Enhanced Gracemont E/S",
+                    0xA => "Raptor Cove P",
+                    else => "Unknown P6.11",
+                },
+                else => "Unknown P6",
+            },
+            7 => "Itanium",
+            15 => switch (a.family_extended) {
+                0 => switch (a.model) {
+                    0, 1 => "Pentium IV (0.18µm)",
+                    2 => "Pentium IV (0.13µm)",
+                    3 => "Pentium IV (0.09µm)",
+                    else => "Unknown Pentium IV",
+                },
+                1 => "Itanium 2",
+                else => "Unknown Intel.x",
+            },
+            else => "Unknown Intel",
         },
-        5 => switch (a.model) {
-            1 => "P5/P54/P54CQS",
-            2 => "P54CS",
-            4 => "P55C",
-            7, 8 => "P55C (Mobile)",
-            9 => "X1000/D1000",
-            else => "P5/Lakemont",
+
+        .AMD => switch (a.family) {
+            4 => switch (a.model) {
+                3 => "486DX/2",
+                7 => "486DX/2-WB",
+                8 => "486DX/4",
+                9 => "486DX/4-WB",
+                14 => "Am5x86-WT",
+                15 => "Am5x86-WB",
+                else => "Unknown K4",
+            },
+            5 => switch (a.model) {
+                0 => "K5/SSA5",
+                1, 2, 3 => "K5",
+                6, 7 => "K6",
+                8 => "K6-2",
+                9 => "K6-3",
+                13 => "K6-2+/K6-III+",
+                else => "Unknown K5/6",
+            },
+            6 => switch (a.model) {
+                0, 1 => "Athlon (25µm)",
+                2 => "Athlon (18µm)",
+                3 => "Duron",
+                4 => "Athlon (Thunderbird)",
+                6 => "Athlon (Palamino)",
+                7 => "Duron (Morgan)",
+                8 => "Athlon (Thoroughbred)",
+                10 => "Athlon (Barton)",
+                else => "Unknown Athlon/Duron",
+            },
+            15 => switch (a.family_extended) {
+                0 => switch (a.model) {
+                    4 => "Athlon 64",
+                    5 => "Athlon 64FX/Opteron",
+                    else => "Unknown Athlon 64",
+                },
+                else => "Unknown AMD.x",
+            },
+            else => "Unknown AMD",
         },
-        6 => switch (a.model) {
-            7 => "Katmai",
-            8 => "Coppermine/T",
-            9 => "Banias",
-            0xB => "Tualatin",
-            0xD => "Dothan",
-            else => "Unknown",
-        },
+
         else => "Unknown",
     };
 }
 
-fn show_features() void {
+fn show_features(mfc: Manufacturer) void {
     const features_result = utils.cpuid(.get_features);
 
     const a: EAXFeatures = @bitCast(features_result.a);
     const family: u8 = if (a.family == 15) a.family + a.family_extended else a.family;
     const model: u8 = if (a.family == 6 or a.family == 15) a.model | (@as(u8, a.model_extended) << 4) else a.model;
-    console.printf("f{d} m{d} s{d} -- {s}\n", .{ family, model, a.stepping, guess_cpu(a) });
+    console.printf("f{d} m{d} s{d} -- {s}\n", .{ family, model, a.stepping, guess_cpu(mfc, a) });
 
     console.printf("Features:", .{});
 
@@ -263,6 +426,6 @@ fn show_features() void {
 }
 
 pub fn initialize() void {
-    show_vendor();
-    show_features();
+    const mfc = show_vendor();
+    show_features(mfc);
 }
