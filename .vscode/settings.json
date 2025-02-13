@@ -1,20 +1,29 @@
 {
   "cSpell.words": [
+    "anyerror",
     "anytype",
     "bochs",
+    "bochsrc",
     "callconv",
+    "cmpsb",
     "comptime",
+    "deinit",
+    "errdefer",
+    "extern",
     "linksection",
+    "lodsb",
     "memcpy",
     "memset",
     "movl",
     "multiboot",
     "noreturn",
+    "orelse",
     "outb",
     "outl",
     "outw",
     "prefetchable",
     "putc",
+    "repe",
     "usize"
   ]
 }

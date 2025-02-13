@@ -1,6 +1,7 @@
 const builtin = @import("builtin");
 const std = @import("std");
-const log = std.log.scoped(.kmain);
+
+const kernel = @import("kernel.zig");
 
 const console = @import("console.zig");
 const cpuid = @import("cpuid.zig");
@@ -13,21 +14,9 @@ const utils = @import("utils.zig");
 
 pub const os = @import("os.zig");
 
-pub fn kernel_log_fn(
-    comptime level: std.log.Level,
-    comptime scope: @TypeOf(.EnumLiteral),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    kernel_log.write(level, "(" ++ @tagName(scope) ++ "): " ++ format, args);
-}
-
 // TODO figure out how to swap this automatically depending on builtin.zig_version.major
 // version 12+
-pub const std_options = .{
-    .log_level = .debug,
-    .logFn = kernel_log_fn,
-};
+pub const std_options = .{ .log_level = .debug, .logFn = kernel.kernel_log_fn };
 // before that
 // pub const std_options = struct {
 //     pub const log_level = .debug;
@@ -35,15 +24,7 @@ pub const std_options = .{
 // };
 
 // Define root.panic to override the std implementation
-pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
-    @setCold(true);
-
-    _ = error_return_trace;
-    _ = ret_addr;
-    kernel_log_fn(.err, .kernel, "!panic! {s}", .{msg});
-
-    while (true) {}
-}
+pub const panic = kernel.panic;
 
 const ALIGN = 1 << 0;
 const MEMINFO = 1 << 1;
@@ -77,18 +58,5 @@ export fn _start() callconv(.Naked) noreturn {
 }
 
 export fn kernel_main() callconv(.C) void {
-    const com1 = serial.initialize(serial.COM1) catch unreachable;
-    kernel_log.initialize(com1);
-
-    gdt.initialize();
-
-    console.initialize();
-    console.puts("Hello Zig Kernel!\n\n");
-
-    cpuid.initialize();
-
-    keyboard.report_status();
-    keyboard.set_leds(true, true, true);
-
-    pci.enumerate_buses();
+    kernel.initialize();
 }

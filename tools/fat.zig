@@ -22,7 +22,7 @@ const BPB = extern struct {
     hidden_sectors: u32,
     large_sector_count: u32,
 
-    // EBPB for FAT12/16
+    // Extended BPB for FAT12/16
     drive_number: u8,
     reserved: u8,
     boot_signature: u8,
@@ -110,13 +110,14 @@ pub fn main() !void {
     const total_clusters = data_sectors / bpb.sectors_per_cluster;
     const first_root_dir_sector = first_data_sector - root_dir_sectors;
     const bytes_per_cluster = bpb.bytes_per_sector * bpb.sectors_per_cluster;
+    const root_dir_offset = first_root_dir_sector * bpb.bytes_per_sector;
 
-    try stdout.print("total_sectors={d} fat_size={d} root_dir_sectors={d} first_data_sector={d} first_fat_sector={d} data_sectors={d} total_clusters={d} first_root_dir_sector={d} bytes_per_cluster={d} type={s}\n", .{ total_sectors, fat_size, root_dir_sectors, first_data_sector, first_fat_sector, data_sectors, total_clusters, first_root_dir_sector, bytes_per_cluster, @tagName(bpb.media_descriptor_type) });
+    try stdout.print("total_sectors={d} fat_size={d} root_dir_sectors={d} first_data_sector={d} first_fat_sector={d} data_sectors={d} total_clusters={d} first_root_dir_sector={d} bytes_per_cluster={d} type={s} root_dir_offset={x}\n", .{ total_sectors, fat_size, root_dir_sectors, first_data_sector, first_fat_sector, data_sectors, total_clusters, first_root_dir_sector, bytes_per_cluster, @tagName(bpb.media_descriptor_type), root_dir_offset });
 
     const file_name_buffer = try allocator.alloc(u8, 12);
     defer allocator.free(file_name_buffer);
 
-    const root_entries = try read_dir(allocator, raw, first_root_dir_sector * bpb.bytes_per_sector);
+    const root_entries = try read_dir(allocator, raw, root_dir_offset);
     defer allocator.free(root_entries);
     for (root_entries) |entry| {
         const ctime_hundredths = entry.ctime_hundredths % 100;
