@@ -7,8 +7,11 @@ fn path(b: *std.Build, sub_path: []const u8) std.Build.LazyPath {
     return .{ .path = sub_path };
 }
 
+var allocator: std.mem.Allocator = undefined;
+
 const src_dir = "src/";
 const bootloader_dir = src_dir ++ "bootloader/";
+const fonts_dir = src_dir ++ "fonts/";
 const zig_out_bin_dir = "zig-out/bin/";
 
 const fat_imgen = "fat_imgen";
@@ -20,7 +23,7 @@ const disk_image = zig_out_bin_dir ++ "disk.bin";
 const main_zig = src_dir ++ "main.zig";
 const os_elf = zig_out_bin_dir ++ "os.elf";
 
-fn build_disk_image(step: *std.Build.Step, node: std.Progress.Node) anyerror!void {
+fn build_disk_image(step: *std.Build.Step, node: std.Progress.Node) !void {
     node.setEstimatedTotalItems(6);
 
     try step.evalChildProcess(&.{ fat_imgen, "-c", "-F", "-f", disk_image });
@@ -42,6 +45,23 @@ fn build_disk_image(step: *std.Build.Step, node: std.Progress.Node) anyerror!voi
     node.setCompletedItems(6);
 }
 
+fn parse_font_files(step: *std.Build.Step, _: std.Progress.Node) !void {
+    var argv = std.ArrayList([]const u8).init(allocator);
+    try argv.append("zig");
+    try argv.append("run");
+    try argv.append("tools/parse_font_txt.zig");
+    try argv.append("--");
+
+    const dir = try std.fs.cwd().openDir(fonts_dir, .{ .iterate = true });
+    var iter = dir.iterate();
+
+    while (try iter.next()) |e| {
+        if (std.mem.eql(u8, std.fs.path.extension(e.name), ".txt")) try argv.append(try std.fs.path.join(allocator, &.{ fonts_dir, e.name }));
+    }
+
+    _ = try step.evalChildProcess(try argv.toOwnedSlice());
+}
+
 const BootType = enum {
     floppy,
     uefi,
@@ -49,6 +69,11 @@ const BootType = enum {
 };
 
 pub fn build(b: *std.Build) void {
+    allocator = b.allocator;
+
+    var parse_font_files_step = b.step("parse font files", "convert fonts/*.txt into .fon files");
+    parse_font_files_step.makeFn = parse_font_files;
+
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
@@ -110,6 +135,8 @@ pub fn build(b: *std.Build) void {
             .override = .{ .custom = "efi/boot" },
         },
     });
+
+    efi_artifact.step.dependOn(parse_font_files_step);
 
     const boot_type = b.option(BootType, "boot", "choose boot type") orelse .direct;
 

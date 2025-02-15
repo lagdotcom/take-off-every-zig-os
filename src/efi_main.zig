@@ -50,6 +50,7 @@ const Printer = struct {
 };
 
 pub fn main() uefi.Status {
+    const allocator = uefi.pool_allocator;
     const boot = uefi.system_table.boot_services.?;
 
     const con = get_protocol(boot, uefi.protocol.SimpleTextOutput) catch unreachable;
@@ -84,56 +85,65 @@ pub fn main() uefi.Status {
         }
     }
 
-    var total_size: u64 = 0;
+    var mem_block_count: usize = 0;
+
+    var total_available: u64 = 0;
     _ = con.outputString(L("enumerating usable memory:\r\n"));
     for (0..map_size / descriptor_size) |i| {
         const offset = i * descriptor_size;
         const d: *uefi.tables.MemoryDescriptor = @alignCast(@ptrCast(map_block[offset .. offset + @sizeOf(uefi.tables.MemoryDescriptor)]));
 
-        const size = 4 * 1024 * d.number_of_pages;
-        const start = d.physical_start;
-        const end = start + size;
-        total_size += size;
-
-        if (d.type == .ConventionalMemory or d.type == .BootServicesCode or d.type == .BootServicesData)
-            printer.print("{d:3} {s:23} addr={x:0>8}-{x:0>8} size={x:0>8}\r\n", .{ i, @tagName(d.type), start, end, size });
+        if (d.type == .ConventionalMemory or d.type == .BootServicesCode or d.type == .BootServicesData) {
+            const size = 4 * 1024 * d.number_of_pages;
+            total_available += size;
+            mem_block_count += 1;
+        }
     }
-    printer.print("total available: {x} bytes\r\n", .{total_size});
+    printer.print("total available: {x} bytes\r\n", .{total_available});
 
-    // let's do some video mode querying
-
+    // get the current video mode
     const gfx = get_protocol(boot, uefi.protocol.GraphicsOutput) catch unreachable;
-    var info: *uefi.protocol.GraphicsOutput.Mode.Info = undefined;
-    var info_size: usize = undefined;
+    const video = kernel.VideoInfo{
+        .framebuffer_addr = gfx.mode.frame_buffer_base,
+        .framebuffer_size = gfx.mode.frame_buffer_size,
+        .horizontal = gfx.mode.info.horizontal_resolution,
+        .vertical = gfx.mode.info.vertical_resolution,
+        .pixels_per_scan_line = gfx.mode.info.pixels_per_scan_line,
+        .framebuffer = @ptrFromInt(@as(usize, @intCast(gfx.mode.frame_buffer_base))),
+    };
 
-    const min_width = 640;
-    const min_height = 480;
-    const max_width = 1024;
-    const max_height = 768;
+    printer.print("framebuffer: @{x}+{x}, {d}x{d}, {d} per line\r\n", .{ video.framebuffer_addr, video.framebuffer_size, video.horizontal, video.vertical, video.pixels_per_scan_line });
 
-    _ = con.outputString(L("enumerating video modes:\r\n"));
-    for (0..gfx.mode.max_mode) |i| {
-        if (gfx.queryMode(@intCast(i), &info_size, &info) != .Success) continue;
-        if (info.horizontal_resolution < min_width or info.horizontal_resolution > max_width or info.vertical_resolution < min_height or info.vertical_resolution > max_height) continue;
+    // get space for our memory block list
+    const memory = allocator.alloc(kernel.MemoryBlock, mem_block_count) catch return .BufferTooSmall;
 
-        printer.print("{d:3} {d:5}x{d:<5} {s}\r\n", .{ i, info.horizontal_resolution, info.vertical_resolution, @tagName(info.pixel_format) });
-    }
-
-    // ok it's time to break free from UEFI land
-    _ = con.clearScreen();
-
-    // get the latest memory map key in case it changed
+    // get the latest memory map
     while (boot.getMemoryMap(&map_size, @ptrCast(map_block), &map_key, &descriptor_size, &descriptor_version) != .Success) {
         if (uefi.Status.Success != boot.allocatePool(uefi.tables.MemoryType.BootServicesData, map_size, &map_block)) {
             return .BufferTooSmall;
         }
     }
 
+    // fill in the memory block list
+    // TODO: merge contiguous blocks
+    var mi: usize = 0;
+    for (0..map_size / descriptor_size) |i| {
+        const offset = i * descriptor_size;
+        const d: *uefi.tables.MemoryDescriptor = @alignCast(@ptrCast(map_block[offset .. offset + @sizeOf(uefi.tables.MemoryDescriptor)]));
+
+        const size = 4 * 1024 * d.number_of_pages;
+        const addr = d.physical_start;
+
+        if (d.type == .ConventionalMemory or d.type == .BootServicesCode or d.type == .BootServicesData) {
+            memory[mi] = .{ .addr = addr, .size = size };
+            mi += 1;
+        }
+    }
+
     if (boot.exitBootServices(uefi.handle, map_key) != .Success) return .LoadError;
 
     // and run the OS kernel!
-    // TODO pass the info the kernel needs...
-    kernel.initialize();
+    kernel.initialize(.{ .memory = memory, .video = video });
 
     return .LoadError;
 }
