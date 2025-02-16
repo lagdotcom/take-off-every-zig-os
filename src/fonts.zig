@@ -13,9 +13,6 @@ fn read_fon(raw: []const u8) console.FontData {
 
     const chars: []console.CharEntry = @as([*]console.CharEntry, @constCast(@alignCast(@ptrCast(raw[entries_offset .. entries_offset + entries_size]))))[0..entry_count];
 
-    // TODO make this work here or in parse_font_txt.zig
-    // std.sort.insertion(console.CharEntry, chars, {}, console.CharEntry.lessThan);
-
     const data_offset = entries_offset + entries_size;
     const data_size = (entry_count + 1) * char_width * char_height;
     const glyph_data: []const bool = @as([*]const bool, @ptrCast(raw[data_offset..]))[0..data_size];

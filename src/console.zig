@@ -90,23 +90,15 @@ fn get_char_data(f: *const FontData, c: u21) []const bool {
     for (f.chars) |*e| {
         if (e.cp == c) return f.glyph_data[e.offset .. e.offset + char_size];
 
-        // TODO implement this so lookup is faster
-        // TODO or even better, use a hash table or whatever
-        // if (e.cp > c) break;
+        // TODO make this into a hash table or whatever later
+        if (e.cp > c) break;
     }
 
     // unknown char is always stored first
     return f.glyph_data[0..char_size];
 }
 
-pub const CharEntry = extern struct {
-    cp: u32,
-    offset: u32,
-
-    pub fn lessThan(_: void, a: CharEntry, b: CharEntry) bool {
-        return a.cp < b.cp;
-    }
-};
+pub const CharEntry = extern struct { cp: u32, offset: u32 };
 
 pub const FontData = struct {
     char_width: u16,
