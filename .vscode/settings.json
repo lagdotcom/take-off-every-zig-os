@@ -8,6 +8,7 @@
     "cmpsb",
     "codepoint",
     "comptime",
+    "CPUID",
     "deinit",
     "errdefer",
     "extern",

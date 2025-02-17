@@ -4,22 +4,31 @@ const log = std.log.scoped(.console);
 const kernel = @import("kernel.zig");
 const fonts = @import("fonts.zig");
 
-var video: *const kernel.VideoInfo = undefined;
+var video = &kernel.boot_info.video;
 var cursor_x: usize = 0;
 var cursor_y: usize = 0;
 var current_font: *const FontData = undefined;
+var fg_colour: u32 = 0xffffffff;
+var bg_colour: u32 = 0;
 
-pub fn initialize(v: *const kernel.VideoInfo) void {
-    video = v;
-
+pub fn initialize() void {
     clear();
 }
 
 pub fn clear() void {
-    @memset(video.framebuffer[0..video.framebuffer_size], 0);
+    video.fill(0);
+
     cursor_x = 0;
     cursor_y = 0;
     current_font = &fonts.laggy8x8;
+}
+
+pub fn set_foreground_colour(colour: u32) void {
+    fg_colour = colour;
+}
+
+pub fn set_background_colour(colour: u32) void {
+    bg_colour = colour;
 }
 
 pub fn puts(str: []const u8) void {
@@ -32,13 +41,25 @@ pub fn putc(c: u21) void {
         new_line();
     } else if (c == '\r') {
         cursor_x = 0;
-    }
-    // TODO '\t'
-    else {
-        if (c != ' ') {
-            put_font_char(current_font, c, cursor_x, cursor_y);
+    } else if (c == '\t') {
+        const tab_size = current_font.char_width * 4;
+        const offset = tab_size - (cursor_x % tab_size);
+        const ex = @min(cursor_x + offset, video.horizontal);
+
+        if (ex > cursor_x)
+            video.fill_rectangle(cursor_x, cursor_y, ex - cursor_x, current_font.char_height, bg_colour);
+
+        if (ex >= video.horizontal) {
+            new_line();
+        } else {
+            cursor_x = ex;
+        }
+    } else {
+        if (c > ' ') {
+            put_font_char(c);
             cursor_x += current_font.char_width;
         } else {
+            video.fill_rectangle(cursor_x, cursor_y, current_font.space_width, current_font.char_height, bg_colour);
             cursor_x += current_font.space_width;
         }
 
@@ -65,22 +86,24 @@ pub fn printf(comptime format: []const u8, args: anytype) void {
 
 fn scroll_down() void {
     // TODO
+    std.debug.panic("TODO: console.scroll_down()", .{});
 }
 
-fn put_font_char(f: *const FontData, c: u21, sx: usize, sy: usize) void {
-    var i = video.pixels_per_scan_line * sy + sx;
+fn put_font_char(c: u21) void {
+    var i = video.get_index(cursor_x, cursor_y);
+    const stride = video.pixels_per_scan_line - current_font.char_width;
 
-    const cd = get_char_data(f, c);
+    const cd = get_char_data(current_font, c);
 
     var j: usize = 0;
-    for (0..f.char_height) |_| {
-        for (0..f.char_width) |_| {
-            video.framebuffer[i] = if (cd[j]) 0xffffffff else 0;
+    for (0..current_font.char_height) |_| {
+        for (0..current_font.char_width) |_| {
+            video.plot(i, if (cd[j]) fg_colour else bg_colour);
             i += 1;
             j += 1;
         }
 
-        i += video.pixels_per_scan_line - f.char_width;
+        i += stride;
     }
 }
 

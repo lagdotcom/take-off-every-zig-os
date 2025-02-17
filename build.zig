@@ -74,6 +74,9 @@ pub fn build(b: *std.Build) void {
     var parse_font_files_step = b.step("parse font files", "convert fonts/*.txt into .fon files");
     parse_font_files_step.makeFn = parse_font_files;
 
+    var compile_assets = b.step("compile assets", "compile all assets");
+    compile_assets.dependOn(parse_font_files_step);
+
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
@@ -117,7 +120,7 @@ pub fn build(b: *std.Build) void {
 
     const kernel_exe = b.addExecutable(kernel_details);
     kernel_exe.setLinkerScriptPath(path(b, "linker.ld"));
-    // b.installArtifact(kernel_exe);
+    kernel_exe.step.dependOn(compile_assets);
 
     const efi = b.addExecutable(.{
         .name = efi_name,
@@ -129,14 +132,13 @@ pub fn build(b: *std.Build) void {
             .abi = .msvc,
         }),
     });
+    efi.step.dependOn(compile_assets);
 
     const efi_artifact = b.addInstallArtifact(efi, .{
         .dest_dir = .{
             .override = .{ .custom = "efi/boot" },
         },
     });
-
-    efi_artifact.step.dependOn(parse_font_files_step);
 
     const boot_type = b.option(BootType, "boot", "choose boot type") orelse .direct;
 

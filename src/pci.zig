@@ -480,7 +480,7 @@ fn show_full_device_info(bus: usize, slot: usize, function: usize, h: DeviceHead
 }
 
 fn show_brief_device_info(bus: usize, slot: usize, function: usize, h: DeviceHeader) void {
-    console.printf("At {d}:{d}:{d} - {x:0>4}:{x:0>4} ({s}) - {s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, get_vendor_name(h.vendor_id), get_device_class(h.class_code, h.subclass) });
+    console.printf("{d}:{d}:{d}\t{x:0>4}:{x:0>4}\t{s}\t{s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, get_vendor_name(h.vendor_id), get_device_class(h.class_code, h.subclass) });
 }
 
 fn show_device_info(bus: PCIBus, slot: PCISlot, function: PCIFunction, h: DeviceHeader) void {

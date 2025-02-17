@@ -110,9 +110,10 @@ pub fn main() uefi.Status {
         .vertical = gfx.mode.info.vertical_resolution,
         .pixels_per_scan_line = gfx.mode.info.pixels_per_scan_line,
         .framebuffer = @ptrFromInt(@as(usize, @intCast(gfx.mode.frame_buffer_base))),
+        .format = gfx.mode.info.pixel_format,
     };
 
-    printer.print("framebuffer: @{x}+{x}, {d}x{d}, {d} per line\r\n", .{ video.framebuffer_addr, video.framebuffer_size, video.horizontal, video.vertical, video.pixels_per_scan_line });
+    printer.print("framebuffer: @{x}+{x}, {d}x{d}, {d} per line, format={s}\r\n", .{ video.framebuffer_addr, video.framebuffer_size, video.horizontal, video.vertical, video.pixels_per_scan_line, @tagName(gfx.mode.info.pixel_format) });
 
     // get space for our memory block list
     const memory = allocator.alloc(kernel.MemoryBlock, mem_block_count) catch return .BufferTooSmall;
