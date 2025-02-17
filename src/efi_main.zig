@@ -136,7 +136,7 @@ pub fn main() uefi.Status {
         const addr = d.physical_start;
 
         if (d.type == .ConventionalMemory or d.type == .BootServicesCode or d.type == .BootServicesData) {
-            memory[mi] = .{ .addr = addr, .size = size };
+            memory[mi] = .{ .addr = @truncate(addr), .size = @truncate(size) };
             mi += 1;
         }
     }

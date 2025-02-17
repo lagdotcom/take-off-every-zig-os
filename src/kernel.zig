@@ -3,15 +3,13 @@ const std = @import("std");
 const console = @import("console.zig");
 const cpuid = @import("cpuid.zig");
 const gdt = @import("gdt.zig");
+const KernelAllocator = @import("KernelAllocator.zig").KernelAllocator;
 const keyboard = @import("keyboard.zig");
 const log = @import("log.zig");
 const pci = @import("pci.zig");
 const serial = @import("serial.zig");
 
-pub const MemoryBlock = struct {
-    addr: u64,
-    size: u64,
-};
+pub const MemoryBlock = struct { addr: usize, size: usize };
 
 pub const VideoInfo = struct {
     framebuffer_addr: u64,
@@ -63,6 +61,7 @@ pub const BootInfo = struct {
 };
 
 pub var boot_info: BootInfo = undefined;
+pub var allocator: KernelAllocator = undefined;
 
 pub fn kernel_log_fn(
     comptime level: std.log.Level,
@@ -94,6 +93,8 @@ pub fn initialize(p: BootInfo) void {
     const com1 = serial.initialize(serial.COM1) catch unreachable;
     log.initialize(com1);
 
+    allocator = KernelAllocator.init(p.memory);
+
     gdt.initialize();
 
     console.initialize();
@@ -112,9 +113,6 @@ pub fn initialize(p: BootInfo) void {
     console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
     console.set_background_colour(0);
     pci.enumerate_buses();
-
-    for (boot_info.memory) |mb|
-        log.write(.debug, "mem block: {x} + {x}", .{ mb.addr, mb.size });
 
     std.debug.panic("end of kernel reached", .{});
 }
