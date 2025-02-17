@@ -116,6 +116,7 @@ fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
     defer o.close();
 
     const ow = o.writer();
+    _ = try ow.write("TOEZFONm");
     try ow.writeInt(u16, @intCast(char_width), .little);
     try ow.writeInt(u16, @intCast(char_height), .little);
     try ow.writeInt(u16, @intCast(space_width), .little);

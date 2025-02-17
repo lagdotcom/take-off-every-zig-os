@@ -19,7 +19,7 @@ org bootloader_org
   jmp short bootloader_start  ; jump over the rest of the header
   nop
 
-  oem_identifier            db "ZigOS   "
+  oem_identifier            db "TOEZigOS"
   bytes_per_sector          dw bpb_bytes_per_sector
   sectors_per_cluster       db bpb_sectors_per_cluster
   reserved_sectors          dw bpb_reserved_sectors

@@ -45,11 +45,11 @@ fn build_disk_image(step: *std.Build.Step, node: std.Progress.Node) !void {
     node.setCompletedItems(6);
 }
 
-fn parse_font_files(step: *std.Build.Step, _: std.Progress.Node) !void {
+fn convert_font_txt(step: *std.Build.Step, node: std.Progress.Node) !void {
     var argv = std.ArrayList([]const u8).init(allocator);
-    try argv.append("zig");
+    try argv.append("zig"); // TODO does this work with zigup build?
     try argv.append("run");
-    try argv.append("tools/parse_font_txt.zig");
+    try argv.append("tools/convert_font_txt.zig");
     try argv.append("--");
 
     const dir = try std.fs.cwd().openDir(fonts_dir, .{ .iterate = true });
@@ -59,7 +59,7 @@ fn parse_font_files(step: *std.Build.Step, _: std.Progress.Node) !void {
         if (std.mem.eql(u8, std.fs.path.extension(e.name), ".txt")) try argv.append(try std.fs.path.join(allocator, &.{ fonts_dir, e.name }));
     }
 
-    _ = try step.evalChildProcess(try argv.toOwnedSlice());
+    _ = try step.evalZigProcess(try argv.toOwnedSlice(), node);
 }
 
 const BootType = enum {
@@ -71,11 +71,11 @@ const BootType = enum {
 pub fn build(b: *std.Build) void {
     allocator = b.allocator;
 
-    var parse_font_files_step = b.step("parse font files", "convert fonts/*.txt into .fon files");
-    parse_font_files_step.makeFn = parse_font_files;
+    var convert_font_txt_step = b.step("convert font files", "convert fonts/*.txt into .fon files");
+    convert_font_txt_step.makeFn = convert_font_txt;
 
     var compile_assets = b.step("compile assets", "compile all assets");
-    compile_assets.dependOn(parse_font_files_step);
+    compile_assets.dependOn(convert_font_txt_step);
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
@@ -87,7 +87,7 @@ pub fn build(b: *std.Build) void {
     const efi_name = if (is_64) "BOOTX64" else "BOOTIA32";
     const efi_arch: std.Target.Cpu.Arch = if (is_64) .x86_64 else .x86;
     const qemu_system_cmd = if (is_64) "qemu-system-x86_64" else "qemu-system-i386";
-    const bios_arg = if (is_64) "local-only/bios64.bin" else "local-only/bios32.bin";
+    const bios_arg = if (is_64) "bios64.bin" else "bios32.bin";
 
     var disabled_features = std.Target.Cpu.Feature.Set.empty;
     var enabled_features = std.Target.Cpu.Feature.Set.empty;

@@ -98,7 +98,7 @@ pub fn initialize(p: BootInfo) void {
 
     console.initialize();
     console.set_foreground_colour(boot_info.video.rgb(255, 255, 0));
-    console.puts("Hello Zig Kernel!\n\n");
+    console.puts("Take off every 'ZIG'‼\n\n");
 
     console.set_foreground_colour(boot_info.video.rgb(255, 255, 255));
 
