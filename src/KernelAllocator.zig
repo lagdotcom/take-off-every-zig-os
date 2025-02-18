@@ -19,6 +19,12 @@ const szEntry = @sizeOf(Entry);
 
 const minimum_block_size = 1024;
 
+pub const UsageReport = struct {
+    free: usize,
+    reserved: usize,
+    used: usize,
+};
+
 pub const KernelAllocator = struct {
     first: *Entry,
 
@@ -185,6 +191,26 @@ pub const KernelAllocator = struct {
 
             entry = e.next;
         }
+    }
+
+    pub fn report(self: *KernelAllocator) UsageReport {
+        var entry: ?*Entry = self.first;
+        var free_mem: usize = 0;
+        var used_mem: usize = 0;
+        var reserved_mem: usize = 0;
+
+        while (entry) |e| {
+            if (e.free) {
+                free_mem += e.size;
+            } else {
+                used_mem += e.size;
+                reserved_mem += e.reserved;
+            }
+
+            entry = e.next;
+        }
+
+        return .{ .free = free_mem, .used = used_mem, .reserved = reserved_mem };
     }
 };
 

@@ -85,6 +85,9 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
     console.puts("\n!!! KERNEL PANIC !!!\n");
     console.puts(msg);
 
+    const usage = kalloc.report();
+    console.printf("\nkalloc: free={d} used={d} reserved={d}\n", .{ usage.free, usage.used, usage.reserved });
+
     while (true) {}
 }
 

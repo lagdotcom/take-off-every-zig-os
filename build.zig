@@ -150,7 +150,7 @@ pub fn build(b: *std.Build) void {
     const qemu_cmd = b.addSystemCommand(&.{
         qemu_system_cmd,
         "-display",
-        "gtk",
+        "gtk,zoom-to-fit=on",
         "-D",
         "./qemu-debug.log",
         "-no-reboot",
