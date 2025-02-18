@@ -119,7 +119,15 @@ pub const KernelAllocator = struct {
             }
         }
 
-        // TODO join with previous block?
+        if (entry.prev) |p| {
+            if (p.free) {
+                log.debug("joining with previous block", .{});
+                p.size += entry.size + szEntry;
+                p.next = entry.next;
+            }
+        }
+
+        // TODO full compact after certain amounts of frees/allocations?
     }
 
     pub fn debug(self: *KernelAllocator) void {
@@ -173,6 +181,7 @@ test "block splitting and joining" {
     var a = KernelAllocator.init(&.{.{ .addr = @intFromPtr(blk.ptr), .size = blk.len }});
     const original_size = a.first.size;
 
+    // check join right
     const alloc1 = try a.alloc(u8, 100);
     try std.testing.expect(a.first.size < blk.len);
 
@@ -183,6 +192,14 @@ test "block splitting and joining" {
     try std.testing.expect(a.first.next.?.next == null);
 
     try a.free(alloc1);
+    try std.testing.expect(a.first.size == original_size);
+
+    // check join left
+    const alloc3 = try a.alloc(u8, 100);
+    const alloc4 = try a.alloc(u8, 100);
+
+    try a.free(alloc3);
+    try a.free(alloc4);
     try std.testing.expect(a.first.size == original_size);
 
     ta.free(blk);

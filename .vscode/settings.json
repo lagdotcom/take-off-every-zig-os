@@ -12,6 +12,7 @@
     "deinit",
     "errdefer",
     "extern",
+    "kalloc",
     "linksection",
     "lodsb",
     "memcpy",
