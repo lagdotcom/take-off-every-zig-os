@@ -19,7 +19,6 @@ const szEntry = @sizeOf(Entry);
 
 const minimum_block_size = 1024;
 
-// TODO make this conform with std.mem.Allocator
 pub const KernelAllocator = struct {
     first: *Entry,
 
@@ -41,6 +40,17 @@ pub const KernelAllocator = struct {
         return KernelAllocator{ .first = first.? };
     }
 
+    pub fn allocator(self: *KernelAllocator) std.mem.Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = alloc,
+                .resize = resize,
+                .free = free,
+            },
+        };
+    }
+
     fn write_entry(addr: usize, size: usize, prev: ?*Entry) *Entry {
         if (prev) |p| {
             log.debug("write_entry({x}, {d}, @{x})", .{ addr, size, p.addr });
@@ -60,8 +70,12 @@ pub const KernelAllocator = struct {
         return entry;
     }
 
-    pub fn alloc(self: *KernelAllocator, comptime T: type, n: usize) ![]T {
-        const required_bytes = @sizeOf(T) * n;
+    pub fn alloc(ctx: *anyopaque, n: usize, log2_ptr_align: u8, return_address: usize) ?[*]u8 {
+        _ = return_address;
+
+        const self: *KernelAllocator = @ptrCast(@alignCast(ctx));
+        const ptr_align = @as(usize, 1) << @as(std.mem.Allocator.Log2Align, @intCast(log2_ptr_align));
+        const required_bytes = n + ptr_align - 1 + @sizeOf(usize);
 
         var entry: ?*Entry = self.first;
         while (entry != null) {
@@ -86,21 +100,54 @@ pub const KernelAllocator = struct {
                     e.next = new_entry;
                 }
 
-                const ptr: [*]T = @ptrFromInt(e.addr);
-                // TODO are you meant to zero this?
-                return ptr[0..n];
+                return @ptrFromInt(e.addr);
             }
 
             entry = e.next;
         }
 
-        return error.OutOfMemory;
+        return null;
     }
 
-    pub fn free(_: *KernelAllocator, memory: anytype) !void {
-        var entry: *Entry = @ptrFromInt(@intFromPtr(memory.ptr) - szEntry);
+    fn get_entry(buf: anytype) *Entry {
+        const entry: *Entry = @ptrFromInt(@intFromPtr(buf.ptr) - szEntry);
+        std.debug.assert(entry.magic == entry_magic_number);
 
-        if (entry.magic != entry_magic_number) return error.NotAllocatedHere;
+        return entry;
+    }
+
+    fn resize(
+        ctx: *anyopaque,
+        buf: []u8,
+        log2_buf_align: u8,
+        new_size: usize,
+        return_address: usize,
+    ) bool {
+        _ = ctx;
+        _ = log2_buf_align;
+        _ = return_address;
+
+        var entry = get_entry(buf);
+        if (entry.size >= new_size) {
+            entry.size = new_size;
+            return true;
+        }
+
+        return false;
+    }
+
+    fn free(
+        ctx: *anyopaque,
+        buf: []u8,
+        log2_buf_align: u8,
+        return_address: usize,
+    ) void {
+        _ = ctx;
+        _ = log2_buf_align;
+        _ = return_address;
+
+        // const self: *KernelAllocator = @ptrCast(@alignCast(ctx));
+        var entry = get_entry(buf);
 
         if (entry.free) {
             log.debug("tried to free already free block at {x}", .{entry.addr});
@@ -147,10 +194,11 @@ test "allocation" {
     const blk1 = try ta.alloc(u8, 128);
     const blk2 = try ta.alloc(u8, 1024);
 
-    var a = KernelAllocator.init(&.{
+    var kalloc = KernelAllocator.init(&.{
         .{ .addr = @intFromPtr(blk1.ptr), .size = blk1.len },
         .{ .addr = @intFromPtr(blk2.ptr), .size = blk2.len },
     });
+    var a = kalloc.allocator();
 
     const alloc1 = try a.alloc(u8, 200);
     try std.testing.expect(alloc1.ptr == blk2.ptr + szEntry);
@@ -158,7 +206,7 @@ test "allocation" {
     const alloc2 = try a.alloc(u8, 8);
     try std.testing.expect(alloc2.ptr == blk1.ptr + szEntry);
 
-    try a.free(alloc2);
+    a.free(alloc2);
 
     const alloc3 = try a.alloc(u8, 16);
     try std.testing.expect(alloc2.ptr == alloc3.ptr);
@@ -166,9 +214,9 @@ test "allocation" {
     const alloc_fail = a.alloc(u8, 10000);
     try std.testing.expectError(error.OutOfMemory, alloc_fail);
 
-    try a.free(alloc1);
-    try a.free(alloc2);
-    try a.free(alloc3);
+    a.free(alloc1);
+    a.free(alloc2);
+    a.free(alloc3);
 
     ta.free(blk1);
     ta.free(blk2);
@@ -178,29 +226,30 @@ test "block splitting and joining" {
     var ta = std.testing.allocator;
 
     const blk = try ta.alloc(u8, 10240);
-    var a = KernelAllocator.init(&.{.{ .addr = @intFromPtr(blk.ptr), .size = blk.len }});
-    const original_size = a.first.size;
+    var kalloc = KernelAllocator.init(&.{.{ .addr = @intFromPtr(blk.ptr), .size = blk.len }});
+    var a = kalloc.allocator();
+    const original_size = kalloc.first.size;
 
     // check join right
     const alloc1 = try a.alloc(u8, 100);
-    try std.testing.expect(a.first.size < blk.len);
+    try std.testing.expect(kalloc.first.size < blk.len);
 
     const alloc2 = try a.alloc(u8, 100);
-    try std.testing.expect(a.first.next.?.addr == @intFromPtr(alloc2.ptr));
+    try std.testing.expect(kalloc.first.next.?.addr == @intFromPtr(alloc2.ptr));
 
-    try a.free(alloc2);
-    try std.testing.expect(a.first.next.?.next == null);
+    a.free(alloc2);
+    try std.testing.expect(kalloc.first.next.?.next == null);
 
-    try a.free(alloc1);
-    try std.testing.expect(a.first.size == original_size);
+    a.free(alloc1);
+    try std.testing.expect(kalloc.first.size == original_size);
 
     // check join left
     const alloc3 = try a.alloc(u8, 100);
     const alloc4 = try a.alloc(u8, 100);
 
-    try a.free(alloc3);
-    try a.free(alloc4);
-    try std.testing.expect(a.first.size == original_size);
+    a.free(alloc3);
+    a.free(alloc4);
+    try std.testing.expect(kalloc.first.size == original_size);
 
     ta.free(blk);
 }

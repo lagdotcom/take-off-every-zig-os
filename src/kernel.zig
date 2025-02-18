@@ -61,7 +61,8 @@ pub const BootInfo = struct {
 };
 
 pub var boot_info: BootInfo = undefined;
-pub var allocator: KernelAllocator = undefined;
+pub var kalloc: KernelAllocator = undefined;
+pub var allocator: std.mem.Allocator = undefined;
 
 pub fn kernel_log_fn(
     comptime level: std.log.Level,
@@ -93,7 +94,8 @@ pub fn initialize(p: BootInfo) void {
     const com1 = serial.initialize(serial.COM1) catch unreachable;
     log.initialize(com1);
 
-    allocator = KernelAllocator.init(p.memory);
+    kalloc = KernelAllocator.init(p.memory);
+    allocator = kalloc.allocator();
 
     gdt.initialize();
 
