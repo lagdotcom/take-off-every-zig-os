@@ -151,6 +151,8 @@ pub fn build(b: *std.Build) void {
         qemu_system_cmd,
         "-display",
         "gtk,zoom-to-fit=on",
+        "-d",
+        "cpu_reset,unimp,guest_errors,trace:ps2*",
         "-D",
         "./qemu-debug.log",
         "-no-reboot",

@@ -47,6 +47,10 @@ pub inline fn cli() void {
     asm volatile ("cli");
 }
 
+pub inline fn io_wait() void {
+    outb(0x80, 0);
+}
+
 pub const CPUIDRequest = enum(u32) {
     get_vendor_id_string,
     get_features,

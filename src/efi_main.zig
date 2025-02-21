@@ -2,6 +2,7 @@ const std = @import("std");
 const uefi = std.os.uefi;
 const L = std.unicode.utf8ToUtf16LeStringLiteral;
 
+const acpi = @import("acpi.zig");
 const kernel = @import("kernel.zig");
 
 pub const std_options = .{ .log_level = .debug, .logFn = kernel.kernel_log_fn };
@@ -49,13 +50,21 @@ const Printer = struct {
     }
 };
 
+fn get_config_table(guid: uefi.Guid) ?*anyopaque {
+    for (0..uefi.system_table.number_of_table_entries) |i| {
+        const table = uefi.system_table.configuration_table[i];
+        if (uefi.Guid.eql(guid, table.vendor_guid)) return table.vendor_table;
+    }
+
+    return null;
+}
+
 pub fn main() uefi.Status {
     const allocator = uefi.pool_allocator;
     const boot = uefi.system_table.boot_services.?;
 
     const con = get_protocol(boot, uefi.protocol.SimpleTextOutput) catch unreachable;
     const printer = Printer.init(uefi.pool_allocator, con) catch unreachable;
-
     printer.clear();
 
     // printer.print("console max mode: {d}\r\n", .{con.mode.max_mode});
@@ -66,6 +75,26 @@ pub fn main() uefi.Status {
 
     //     printer.print("console mode {d}: {d}x{d}\r\n", .{ mode, columns, rows });
     // }
+
+    // let's try to find the RSDP
+    var rsdp_entries: []usize = undefined;
+    if (get_config_table(uefi.tables.ConfigurationTable.acpi_20_table_guid)) |ptr| {
+        const rsdp: *acpi.RSDP_v2 = @alignCast(@ptrCast(ptr));
+        printer.print("ACPI 2.0+: XSDT@{x}\r\n", .{rsdp.xsdt_address});
+        const xsdt = acpi.read_xsdt(@intCast(rsdp.xsdt_address)) catch unreachable;
+
+        // have to do some conversion here
+        rsdp_entries = allocator.alloc(usize, xsdt.entries.len) catch unreachable;
+        for (xsdt.entries, 0..) |e, i| rsdp_entries[i] = @intCast(e);
+    } else if (get_config_table(uefi.tables.ConfigurationTable.acpi_10_table_guid)) |ptr| {
+        const rsdp: *acpi.RSDP_v1 = @alignCast(@ptrCast(ptr));
+        printer.print("ACPI 1.0: RSDT@{x}\r\n", .{rsdp.rsdt_address});
+        const rsdt = acpi.read_rsdt(@intCast(rsdp.rsdt_address)) catch unreachable;
+        rsdp_entries = rsdt.entries;
+    } else {
+        _ = con.outputString(L("ACPI not supported.\r\n"));
+        rsdp_entries = &.{};
+    }
 
     var map_size: usize = 0;
     var map_key: usize = undefined;
@@ -144,7 +173,7 @@ pub fn main() uefi.Status {
     if (boot.exitBootServices(uefi.handle, map_key) != .Success) return .LoadError;
 
     // and run the OS kernel!
-    kernel.initialize(.{ .memory = memory, .video = video });
+    kernel.initialize(.{ .memory = memory, .video = video, .rsdp_entries = rsdp_entries });
 
     return .LoadError;
 }

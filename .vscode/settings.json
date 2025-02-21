@@ -12,6 +12,7 @@
     "deinit",
     "errdefer",
     "extern",
+    "FADT",
     "kalloc",
     "linksection",
     "lodsb",
@@ -27,6 +28,7 @@
     "prefetchable",
     "putc",
     "repe",
+    "Typematic",
     "usize"
   ]
 }
