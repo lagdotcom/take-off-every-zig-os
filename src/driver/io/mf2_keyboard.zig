@@ -2,7 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.mf2_keyboard);
 
 const interrupts = @import("../../interrupts.zig");
-const kernel = @import("../../kernel.zig");
+const kb = @import("../../keyboard.zig");
 const pic = @import("../../pic.zig");
 const ps2 = @import("../../ps2.zig");
 
@@ -36,154 +36,31 @@ const Response = enum(u8) {
     set1_error = 0xff,
 };
 
-const Key = enum(u8) {
-    tilde = 1,
-    @"1",
-    @"2",
-    @"3",
-    @"4",
-    @"5",
-    @"6",
-    @"7",
-    @"8",
-    @"9",
-    @"0",
-    minus,
-    plus,
-    backspace = 15,
-    tab,
-    q,
-    w,
-    e,
-    r,
-    t,
-    y,
-    u,
-    i,
-    o,
-    p,
-    left_square_bracket,
-    right_square_bracket,
-    pipe,
-
-    caps_lock,
-    a,
-    s,
-    d,
-    f,
-    g,
-    h,
-    j,
-    k,
-    l,
-    colon,
-    double_quote,
-
-    left_enter,
-    left_shift,
-    macro,
-    z,
-    x,
-    c,
-    v,
-    b,
-    n,
-    m,
-    left_angle_bracket,
-    right_angle_bracket,
-    slash,
-    right_shift,
-
-    left_control,
-    left_alt,
-    space,
-    right_alt,
-    right_ctrl = 64,
-
-    insert = 75,
-    delete,
-    left_arrow = 79,
-    home,
-    end,
-    up_arrow = 83,
-    down_arrow,
-    page_up,
-    page_down,
-    right_arrow = 89,
-
-    num_lock = 90,
-    num_pad_7,
-    num_pad_4,
-    num_pad_1,
-    num_pad_8,
-    num_pad_5,
-    num_pad_2,
-    num_pad_0,
-    num_pad_multiply,
-    num_pad_9,
-    num_pad_6,
-    num_pad_3,
-    num_pad_delete,
-    num_pad_minus,
-    num_pad_plus,
-
-    enter = 108,
-    escape = 110,
-
-    f1 = 112,
-    f2,
-    f3,
-    f4,
-    f5,
-    f6,
-    f7,
-    f8,
-    f9,
-    f10,
-    f11,
-    f12,
-
-    print_screen = 124,
-    scroll_lock,
-    pause,
-
-    COUNT,
-};
-
 const State = struct { interpret: *const fn (byte: u8) State };
 const s_normal = State{ .interpret = state_normal };
 const s_e0 = State{ .interpret = state_e0 };
 const s_f0 = State{ .interpret = state_f0 };
 const s_e0_f0 = State{ .interpret = state_e0_f0 };
 
-const Driver = struct {
-    aux: bool,
-    states: []bool,
-    state: State,
-};
-var driver: Driver = .{
-    .aux = false,
-    .states = undefined,
-    .state = s_normal,
-};
+const Driver = struct { aux: bool, state: State };
+var driver: Driver = .{ .aux = false, .state = s_normal };
 
 fn on_byte(b: u8) void {
     driver.state = driver.state.interpret(b);
 }
 
-fn key_on(key: Key) void {
+fn key_on(key: kb.Key) void {
     log.debug("ON: {s}", .{@tagName(key)});
-    driver.states[@intFromEnum(key)] = true;
+    kb.on(key);
     // TODO fire key event
 }
 
-fn key_off(key: Key) void {
+fn key_off(key: kb.Key) void {
     log.debug("OFF: {s}", .{@tagName(key)});
-    driver.states[@intFromEnum(key)] = false;
-    // TODO fire key event
+    kb.off(key);
 }
 
-fn key_on_off(key: Key) void {
+fn key_on_off(key: kb.Key) void {
     key_on(key);
     key_off(key);
 }
@@ -205,7 +82,7 @@ fn state_normal(b: u8) State {
         0x46 => key_on(.@"9"),
         0x45 => key_on(.@"0"),
         0x4e => key_on(.minus),
-        0x55 => key_on(.plus),
+        0x55 => key_on(.equals),
         0x66 => key_on(.backspace),
         0x0d => key_on(.tab),
         0x15 => key_on(.q),
@@ -231,7 +108,7 @@ fn state_normal(b: u8) State {
         0x3b => key_on(.j),
         0x42 => key_on(.k),
         0x4b => key_on(.l),
-        0x4c => key_on(.colon),
+        0x4c => key_on(.semicolon),
         0x52 => key_on(.double_quote),
         0x5a => key_on(.left_enter),
         0x12 => key_on(.left_shift),
@@ -243,11 +120,11 @@ fn state_normal(b: u8) State {
         0x32 => key_on(.b),
         0x31 => key_on(.n),
         0x3a => key_on(.m),
-        0x41 => key_on(.left_angle_bracket),
-        0x49 => key_on(.right_angle_bracket),
+        0x41 => key_on(.comma),
+        0x49 => key_on(.period),
         0x4a => key_on(.slash),
         0x59 => key_on(.right_shift),
-        0x14 => key_on(.left_control),
+        0x14 => key_on(.left_ctrl),
         0x11 => key_on(.left_alt),
         0x29 => key_on(.space),
         0x77 => key_on(.num_lock),
@@ -290,6 +167,7 @@ fn state_e0(b: u8) State {
     switch (b) {
         0x11 => key_on(.right_alt),
         0x14 => key_on(.right_ctrl),
+        0x4a => key_on(.num_pad_divide),
         0x5a => key_on(.enter),
 
         0x70 => key_on(.insert),
@@ -322,7 +200,7 @@ fn state_f0(b: u8) State {
         0x46 => key_off(.@"9"),
         0x45 => key_off(.@"0"),
         0x4e => key_off(.minus),
-        0x55 => key_off(.plus),
+        0x55 => key_off(.equals),
         0x66 => key_off(.backspace),
         0x0d => key_off(.tab),
         0x15 => key_off(.q),
@@ -348,7 +226,7 @@ fn state_f0(b: u8) State {
         0x3b => key_off(.j),
         0x42 => key_off(.k),
         0x4b => key_off(.l),
-        0x4c => key_off(.colon),
+        0x4c => key_off(.semicolon),
         0x52 => key_off(.double_quote),
         0x5a => key_off(.left_enter),
         0x12 => key_off(.left_shift),
@@ -360,11 +238,11 @@ fn state_f0(b: u8) State {
         0x32 => key_off(.b),
         0x31 => key_off(.n),
         0x3a => key_off(.m),
-        0x41 => key_off(.left_angle_bracket),
-        0x49 => key_off(.right_angle_bracket),
+        0x41 => key_off(.comma),
+        0x49 => key_off(.period),
         0x4a => key_off(.slash),
         0x59 => key_off(.right_shift),
-        0x14 => key_off(.left_control),
+        0x14 => key_off(.left_ctrl),
         0x11 => key_off(.left_alt),
         0x29 => key_off(.space),
         0x77 => key_off(.num_lock),
@@ -406,6 +284,7 @@ fn state_e0_f0(b: u8) State {
     switch (b) {
         0x11 => key_off(.right_alt),
         0x14 => key_off(.right_ctrl),
+        0x4a => key_off(.num_pad_divide),
         0x5a => key_off(.enter),
 
         0x70 => key_off(.insert),
@@ -438,7 +317,6 @@ fn kb_irq_handler(ctx: *interrupts.CpuState) usize {
 pub fn initialize(is_aux: bool) void {
     log.debug("initializing on {s}", .{if (is_aux) "aux" else "main"});
 
-    driver.states = kernel.allocator.alloc(bool, @intFromEnum(Key.COUNT)) catch unreachable;
     driver.aux = is_aux;
     driver.state = s_normal;
 

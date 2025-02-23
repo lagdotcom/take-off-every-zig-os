@@ -6,6 +6,7 @@ const cpuid = @import("cpuid.zig");
 const gdt = @import("gdt.zig");
 const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig").KernelAllocator;
+const keyboard = @import("keyboard.zig");
 const log = @import("log.zig");
 const pci = @import("pci.zig");
 const ps2 = @import("ps2.zig");
@@ -142,9 +143,12 @@ pub fn initialize(p: BootInfo) void {
     }
 
     interrupts.initialize();
+    keyboard.initialize();
 
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
+
+    keyboard.echo_mode();
 
     std.debug.panic("end of kernel reached", .{});
 }

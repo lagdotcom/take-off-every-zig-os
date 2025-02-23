@@ -18,6 +18,12 @@ const Entry = struct {
 const szEntry = @sizeOf(Entry);
 
 const minimum_block_size = 1024;
+fn round_up_to_block_size(value: usize) usize {
+    var blocks = @divFloor(value, minimum_block_size);
+    const overflow = @mod(value, minimum_block_size);
+    if (overflow > 0) blocks += 1;
+    return blocks * minimum_block_size;
+}
 
 pub const UsageReport = struct {
     free: usize,
@@ -95,7 +101,7 @@ pub const KernelAllocator = struct {
 
                 const remaining_bytes_in_block = e.size - required_bytes;
                 if (remaining_bytes_in_block >= minimum_block_size) {
-                    const taken_size = @max(minimum_block_size, required_bytes);
+                    const taken_size = round_up_to_block_size(minimum_block_size);
                     const new_block_size = e.size - taken_size;
                     e.size = taken_size;
 

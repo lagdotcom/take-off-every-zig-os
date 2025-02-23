@@ -85,8 +85,22 @@ pub fn printf(comptime format: []const u8, args: anytype) void {
 }
 
 fn scroll_down() void {
-    // TODO
-    std.debug.panic("TODO: console.scroll_down()", .{});
+    const row_size = video.pixels_per_scan_line * current_font.char_height;
+    const stop_copying_at = video.pixels_per_scan_line * (video.vertical - current_font.char_height);
+
+    var offset: usize = 0;
+    while (offset < stop_copying_at) {
+        @memcpy(
+            video.framebuffer[offset .. offset + row_size],
+            video.framebuffer[offset + row_size .. offset + row_size + row_size],
+        );
+
+        offset += row_size;
+    }
+
+    @memset(video.framebuffer[stop_copying_at..video.framebuffer_size], 0);
+
+    cursor_y -= current_font.char_height;
 }
 
 fn put_font_char(c: u21) void {
