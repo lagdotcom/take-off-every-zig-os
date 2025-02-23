@@ -47,6 +47,10 @@ pub inline fn cli() void {
     asm volatile ("cli");
 }
 
+pub inline fn sti() void {
+    asm volatile ("sti");
+}
+
 pub inline fn io_wait() void {
     outb(0x80, 0);
 }

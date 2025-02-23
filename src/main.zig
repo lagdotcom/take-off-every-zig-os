@@ -57,6 +57,6 @@ export fn _start() callconv(.Naked) noreturn {
     while (true) {}
 }
 
-export fn kernel_main() callconv(.C) void {
+export fn kernel_main() callconv(.c) void {
     kernel.initialize();
 }

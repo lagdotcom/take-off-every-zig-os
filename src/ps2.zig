@@ -140,14 +140,14 @@ fn debug_configuration(ccb: ConfigByte, prefix: []const u8) void {
     });
 }
 
-fn get_controller_configuration() ConfigByte {
+pub fn get_controller_configuration() ConfigByte {
     send_command(.read_controller_configuration);
-    const ccb: ConfigByte = @bitCast(get_reply_byte());
+    const ccb: ConfigByte = @bitCast(get_data());
     debug_configuration(ccb, "get");
     return ccb;
 }
 
-fn set_controller_configuration(ccb: ConfigByte) void {
+pub fn set_controller_configuration(ccb: ConfigByte) void {
     send_command(.write_controller_configuration);
     send_data(@bitCast(ccb));
     debug_configuration(ccb, "set");
@@ -179,7 +179,7 @@ fn send_device_command(cmd: DeviceCommand) void {
     log.debug("timeout on send_device_command: {s}", .{@tagName(cmd)});
 }
 
-fn send_data(byte: u8) void {
+pub fn send_data(byte: u8) void {
     log.debug("send_data: {d}/{x}", .{ byte, byte });
 
     utils.io_wait();
@@ -191,7 +191,7 @@ fn send_data(byte: u8) void {
     log.warn("timeout on send_data: {d}/{x}", .{ byte, byte });
 }
 
-fn get_reply_byte() u8 {
+pub fn get_data() u8 {
     utils.io_wait();
     for (0..io_timeout_attempts) |_| {
         if (get_status().output_full) {
@@ -206,7 +206,7 @@ fn get_reply_byte() u8 {
     return 0;
 }
 
-fn maybe_get_reply() ?u8 {
+fn maybe_get_data() ?u8 {
     for (0..io_timeout_attempts) |_| {
         if (get_status().output_full) {
             utils.io_wait();
@@ -218,7 +218,7 @@ fn maybe_get_reply() ?u8 {
 }
 
 fn get_reply() Reply {
-    return @enumFromInt(get_reply_byte());
+    return @enumFromInt(get_data());
 }
 
 fn command_and_response(cmd: ControllerCommand) Reply {
@@ -307,7 +307,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     // Step 6: Perform Controller Self Test
     {
         send_command(.self_test);
-        const rep = get_reply_byte();
+        const rep = get_data();
         if (rep != 0x55) {
             log.warn("self test: {x}, expected 55", .{rep});
             return;
@@ -338,14 +338,14 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     var aux_ok = false;
     {
         send_command(.interface_test);
-        const reply = get_reply_byte();
+        const reply = get_data();
         if (reply != 0) {
             log.debug("interface test: {x}, expected 0", .{reply});
         } else main_ok = true;
 
         if (has_aux) {
             send_command(.interface_test_aux);
-            const reply_aux = get_reply_byte();
+            const reply_aux = get_data();
             if (reply_aux != 0) {
                 log.debug("interface test aux: {x}, expected 0", .{reply_aux});
             } else aux_ok = true;
@@ -360,7 +360,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     // try an echo
     {
         send_device_command(.echo);
-        const reply = get_reply_byte();
+        const reply = get_data();
         if (reply == 0xee) {
             log.debug("echo ok", .{});
         } else {
@@ -397,9 +397,9 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
             if (response_2 != .self_test_passed) {
                 log.warn("main reset: got {s}, expected self_test_passed", .{@tagName(response_2)});
             } else {
-                if (maybe_get_reply()) |b| {
+                if (maybe_get_data()) |b| {
                     main_device_id[0] = b;
-                    if (maybe_get_reply()) |b2| main_device_id[1] = b2;
+                    if (maybe_get_data()) |b2| main_device_id[1] = b2;
                 }
             }
         }
@@ -418,9 +418,9 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
             if (response_2 != .self_test_passed) {
                 log.warn("aux reset: got {s}, expected self_test_passed", .{@tagName(response_2)});
             } else {
-                if (maybe_get_reply()) |b| {
+                if (maybe_get_data()) |b| {
                     aux_device_id[0] = b;
-                    if (maybe_get_reply()) |b2| aux_device_id[1] = b2;
+                    if (maybe_get_data()) |b2| aux_device_id[1] = b2;
                 }
             }
         }
@@ -440,8 +440,8 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
             if (response_2 != .ack) {
                 log.warn("get id: got {s}, expected ack", .{@tagName(response_2)});
             } else {
-                if (maybe_get_reply()) |b| main_device_id[0] = b;
-                if (maybe_get_reply()) |b| main_device_id[1] = b;
+                if (maybe_get_data()) |b| main_device_id[0] = b;
+                if (maybe_get_data()) |b| main_device_id[1] = b;
 
                 send_device_command(.enable_scanning);
             }
@@ -462,8 +462,8 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
             if (response_2 != .ack) {
                 log.warn("get aux id: got {s}, expected ack", .{@tagName(response_2)});
             } else {
-                if (maybe_get_reply()) |b| aux_device_id[0] = b;
-                if (maybe_get_reply()) |b| aux_device_id[1] = b;
+                if (maybe_get_data()) |b| aux_device_id[0] = b;
+                if (maybe_get_data()) |b| aux_device_id[1] = b;
 
                 send_command(.write_aux_input);
                 send_device_command(.enable_scanning);

@@ -104,7 +104,6 @@ pub fn initialize(p: BootInfo) void {
     allocator = kalloc.allocator();
 
     gdt.initialize();
-    interrupts.initialize();
 
     console.initialize();
     console.set_foreground_colour(boot_info.video.rgb(255, 255, 0));
@@ -141,6 +140,8 @@ pub fn initialize(p: BootInfo) void {
             },
         }
     }
+
+    interrupts.initialize();
 
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
