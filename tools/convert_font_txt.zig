@@ -74,7 +74,15 @@ fn get_next_glyph(allocator: std.mem.Allocator, r: std.fs.File.Reader, w: usize,
     }
 }
 
-const CharEntry = extern struct { cp: u32, offset: u32 };
+const CharEntry = extern struct {
+    cp: u32,
+    offset: u32,
+
+    fn less_than(_: void, a: CharEntry, b: CharEntry) bool {
+        if (a.cp == b.cp) std.debug.panic("font has duplicate codepoint: {d}", .{a.cp});
+        return a.cp < b.cp;
+    }
+};
 
 fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
     // std.log.debug("reading: {s}", .{path});
@@ -102,12 +110,7 @@ fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
         glyph_bits = try std.mem.concat(allocator, bool, &.{ glyph_bits, g.bits });
     }
 
-    std.sort.insertion(CharEntry, entries.items, {}, struct {
-        fn lessThan(_: void, a: CharEntry, b: CharEntry) bool {
-            if (a.cp == b.cp) std.debug.panic("font has duplicate codepoint: {d}", .{a.cp});
-            return a.cp < b.cp;
-        }
-    }.lessThan);
+    std.sort.insertion(CharEntry, entries.items, {}, CharEntry.less_than);
 
     f.close();
 

@@ -358,69 +358,12 @@ fn show_features(mfc: Manufacturer) void {
     console.printf("Features:", .{});
 
     const d: EDXFeatures = @bitCast(features_result.d);
-    if (d.fpu) console.puts(" fpu");
-    if (d.vme) console.puts(" vme");
-    if (d.de) console.puts(" de");
-    if (d.pse) console.puts(" pse");
-    if (d.tsc) console.puts(" tsc");
-    if (d.msr) console.puts(" msr");
-    if (d.pae) console.puts(" pae");
-    if (d.mce) console.puts(" mce");
-    if (d.cx8) console.puts(" cx8");
-    if (d.apic) console.puts(" apic");
-    if (d.sep) console.puts(" sep");
-    if (d.mtrr) console.puts(" mtrr");
-    if (d.pge) console.puts(" pge");
-    if (d.mca) console.puts(" mca");
-    if (d.cmov) console.puts(" cmov");
-    if (d.pat) console.puts(" pat");
-    if (d.pse_36) console.puts(" pse-36");
-    if (d.psn) console.puts(" psn");
-    if (d.clfsh) console.puts(" clflush");
-    if (d.ds) console.puts(" ds");
-    if (d.acpi) console.puts(" acpi");
-    if (d.mmx) console.puts(" mmx");
-    if (d.fxsr) console.puts(" fxsr");
-    if (d.sse) console.puts(" sse");
-    if (d.sse2) console.puts(" sse2");
-    if (d.ss) console.puts(" ss");
-    if (d.htt) console.puts(" htt");
-    if (d.tm) console.puts(" tm");
-    if (d.ia64) console.puts(" ia64");
-    if (d.pbe) console.puts(" pbe");
+    inline for (std.meta.fields(EDXFeatures)) |f|
+        if (@field(d, f.name)) console.puts(" " ++ f.name);
 
     const c: ECXFeatures = @bitCast(features_result.c);
-    if (c.sse3) console.puts(" sse3");
-    if (c.pclmul) console.puts(" pclmul");
-    if (c.dtes64) console.puts(" dtes64");
-    if (c.monitor) console.puts(" monitor");
-    if (c.ds_cpl) console.puts(" ds-cpl");
-    if (c.vmx) console.puts(" vmx");
-    if (c.smx) console.puts(" smx");
-    if (c.est) console.puts(" est");
-    if (c.tm2) console.puts(" tm2");
-    if (c.ssse3) console.puts(" ssse3");
-    if (c.cnxt_id) console.puts(" cnxt-id");
-    if (c.sdbg) console.puts(" sdbg");
-    if (c.fma) console.puts(" fma");
-    if (c.cx16) console.puts(" cx16");
-    if (c.xtpr) console.puts(" xtpr");
-    if (c.pdcm) console.puts(" pdcm");
-    if (c.pcid) console.puts(" pcid");
-    if (c.dca) console.puts(" dca");
-    if (c.sse4_1) console.puts(" sse4.1");
-    if (c.sse4_2) console.puts(" sse4.2");
-    if (c.x2apic) console.puts(" x2apic");
-    if (c.movbe) console.puts(" movbe");
-    if (c.popcnt) console.puts(" popcnt");
-    if (c.tsc) console.puts(" tsc-deadline");
-    if (c.aes_ni) console.puts(" aes-ni");
-    if (c.xsave) console.puts(" xsave");
-    if (c.osxsave) console.puts(" osxsave");
-    if (c.avx) console.puts(" avx");
-    if (c.f16c) console.puts(" f16c");
-    if (c.rdrand) console.puts(" rdrand");
-    if (c.hypervisor) console.puts(" hypervisor");
+    inline for (std.meta.fields(ECXFeatures)) |f|
+        if (@field(c, f.name)) console.puts(" " ++ f.name);
 
     console.new_line();
 }
