@@ -11,6 +11,7 @@ const log = @import("log.zig");
 const pci = @import("pci.zig");
 const ps2 = @import("ps2.zig");
 const serial = @import("serial.zig");
+const shell = @import("shell.zig");
 
 pub const MemoryBlock = struct { addr: usize, size: usize };
 
@@ -98,11 +99,15 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
 pub fn initialize(p: BootInfo) void {
     boot_info = p;
 
+    // initialize super early so we have logging
     const com1 = serial.initialize(serial.COM1) catch unreachable;
     log.initialize(com1);
 
     kalloc = KernelAllocator.init(p.memory);
     allocator = kalloc.allocator();
+
+    // initialize early so other modules can add their commands to it
+    shell.initialize();
 
     gdt.initialize();
 
@@ -113,12 +118,7 @@ pub fn initialize(p: BootInfo) void {
     console.set_foreground_colour(boot_info.video.rgb(255, 255, 255));
 
     cpuid.initialize();
-
-    console.new_line();
-    console.set_background_colour(boot_info.video.rgb(64, 64, 64));
-    console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
-    console.set_background_colour(0);
-    pci.enumerate_buses();
+    pci.initialize();
 
     var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
 
@@ -148,7 +148,7 @@ pub fn initialize(p: BootInfo) void {
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
 
-    keyboard.echo_mode();
+    shell.enter();
 
     std.debug.panic("end of kernel reached", .{});
 }

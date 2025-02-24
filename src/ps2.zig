@@ -206,7 +206,7 @@ pub fn get_data() u8 {
     return 0;
 }
 
-fn maybe_get_data() ?u8 {
+pub fn maybe_get_data() ?u8 {
     for (0..io_timeout_attempts) |_| {
         if (get_status().output_full) {
             utils.io_wait();

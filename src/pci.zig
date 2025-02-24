@@ -2,6 +2,8 @@ const std = @import("std");
 const log = std.log.scoped(.pci);
 
 const console = @import("console.zig");
+const kernel = @import("kernel.zig");
+const shell = @import("shell.zig");
 const utils = @import("utils.zig");
 
 const CONFIG_ADDRESS = 0xcf8;
@@ -532,4 +534,28 @@ pub fn brute_force_devices() void {
             }
         }
     }
+}
+
+fn list_pci_devices(_: []const u8) void {
+    console.set_background_colour(kernel.boot_info.video.rgb(64, 64, 64));
+    console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
+    console.set_background_colour(0);
+    enumerate_buses();
+}
+
+pub fn initialize() void {
+    log.debug("initializing", .{});
+    defer log.debug("done", .{});
+
+    shell.add_command(.{
+        .name = "pci",
+        .summary = "Get information on PCI devices",
+        .sub_commands = &.{
+            .{
+                .name = "list",
+                .summary = "List available PCI devices",
+                .exec = list_pci_devices,
+            },
+        },
+    });
 }

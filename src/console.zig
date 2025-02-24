@@ -36,6 +36,16 @@ pub fn puts(str: []const u8) void {
     while (vi.nextCodepoint()) |c| putc(c);
 }
 
+fn put_char_or_space(c: u21) bool {
+    if (c > ' ') {
+        put_font_char(c);
+        return true;
+    } else {
+        video.fill_rectangle(cursor_x, cursor_y, current_font.space_width, current_font.char_height, bg_colour);
+        return false;
+    }
+}
+
 pub fn putc(c: u21) void {
     if (c == '\n') {
         new_line();
@@ -55,15 +65,35 @@ pub fn putc(c: u21) void {
             cursor_x = ex;
         }
     } else {
-        if (c > ' ') {
-            put_font_char(c);
-            cursor_x += current_font.char_width;
-        } else {
-            video.fill_rectangle(cursor_x, cursor_y, current_font.space_width, current_font.char_height, bg_colour);
-            cursor_x += current_font.space_width;
+        cursor_x += if (put_char_or_space(c)) current_font.char_width else current_font.space_width;
+        if (cursor_x >= video.horizontal) new_line();
+    }
+}
+
+pub fn replace_last_char(s: []const u8, move: bool) void {
+    var new_x = cursor_x;
+    var new_y = cursor_y;
+
+    if (cursor_x == 0) {
+        if (cursor_y == 0) {
+            // lol now what
+            return;
         }
 
-        if (cursor_x >= video.horizontal) new_line();
+        new_y -= current_font.char_height;
+        new_x = video.horizontal - current_font.char_width;
+    } else {
+        new_x -= current_font.char_width;
+    }
+
+    cursor_x = new_x;
+    cursor_y = new_y;
+
+    puts(s);
+
+    if (move) {
+        cursor_x = new_x;
+        cursor_y = new_y;
     }
 }
 

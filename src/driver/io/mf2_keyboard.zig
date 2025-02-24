@@ -320,6 +320,9 @@ pub fn initialize(is_aux: bool) void {
     driver.aux = is_aux;
     driver.state = s_normal;
 
+    // clear any remaining data in the port
+    _ = ps2.maybe_get_data();
+
     interrupts.set_irq_handler(.keyboard, kb_irq_handler);
     pic.clear_mask(1);
 

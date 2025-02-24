@@ -5,6 +5,8 @@ const serial = @import("serial.zig");
 var port: serial.Port = undefined;
 
 pub fn initialize(use_port: serial.Port) void {
+    // TODO cache incoming messages and output them once this happens?
+
     port = use_port;
     write(.debug, "logging initialized", .{});
 }
