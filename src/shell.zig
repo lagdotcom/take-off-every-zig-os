@@ -129,11 +129,7 @@ fn exec_command(cmd_line: []u8, commands: []const ShellCommand) bool {
     const first_word = if (si) |i| cmd_line[0..i] else cmd_line;
     const rest_of_line = if (si) |i| cmd_line[i + 1 ..] else cmd_line[0..0];
 
-    console.puts("exec_command(\"");
-    console.puts(first_word);
-    console.puts("\", \"");
-    console.puts(rest_of_line);
-    console.printf("\", {d} commands)\n", .{commands.len});
+    log.debug("exec_command: '{s}' '{s}' {d} commands", .{ first_word, rest_of_line, commands.len });
 
     for (commands) |cmd| {
         if (std.mem.eql(u8, cmd.name, first_word)) {

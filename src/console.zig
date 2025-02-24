@@ -20,7 +20,11 @@ pub fn clear() void {
 
     cursor_x = 0;
     cursor_y = 0;
-    current_font = &fonts.laggy8x8;
+    set_font(&fonts.zero_wing_8x8);
+}
+
+pub fn set_font(font: *const FontData) void {
+    current_font = font;
 }
 
 pub fn set_foreground_colour(colour: u32) void {
@@ -151,17 +155,70 @@ fn put_font_char(c: u21) void {
     }
 }
 
-fn get_char_data(f: *const FontData, c: u21) []const bool {
+const Fallback = struct { cp: u21, alternatives: []const u21 };
+
+const fallback_table: []const Fallback = &.{
+    .{ .cp = 'a', .alternatives = &.{'A'} },
+    .{ .cp = 'b', .alternatives = &.{'B'} },
+    .{ .cp = 'c', .alternatives = &.{'C'} },
+    .{ .cp = 'd', .alternatives = &.{'D'} },
+    .{ .cp = 'e', .alternatives = &.{'E'} },
+    .{ .cp = 'f', .alternatives = &.{'F'} },
+    .{ .cp = 'g', .alternatives = &.{'G'} },
+    .{ .cp = 'h', .alternatives = &.{'H'} },
+    .{ .cp = 'i', .alternatives = &.{'I'} },
+    .{ .cp = 'j', .alternatives = &.{'J'} },
+    .{ .cp = 'k', .alternatives = &.{'K'} },
+    .{ .cp = 'l', .alternatives = &.{'L'} },
+    .{ .cp = 'm', .alternatives = &.{'M'} },
+    .{ .cp = 'n', .alternatives = &.{'N'} },
+    .{ .cp = 'o', .alternatives = &.{'O'} },
+    .{ .cp = 'p', .alternatives = &.{'P'} },
+    .{ .cp = 'q', .alternatives = &.{'Q'} },
+    .{ .cp = 'r', .alternatives = &.{'R'} },
+    .{ .cp = 's', .alternatives = &.{'S'} },
+    .{ .cp = 't', .alternatives = &.{'T'} },
+    .{ .cp = 'u', .alternatives = &.{'U'} },
+    .{ .cp = 'v', .alternatives = &.{'V'} },
+    .{ .cp = 'w', .alternatives = &.{'W'} },
+    .{ .cp = 'x', .alternatives = &.{'X'} },
+    .{ .cp = 'y', .alternatives = &.{'Y'} },
+    .{ .cp = 'z', .alternatives = &.{'Z'} },
+    .{ .cp = '‼', .alternatives = &.{'!'} },
+};
+
+fn get_char_fallbacks(cp: u21) ?[]const u21 {
+    for (fallback_table) |fb| {
+        if (fb.cp == cp) return fb.alternatives;
+    }
+    return null;
+}
+
+fn get_individual_char_data(f: *const FontData, cp: u21) ?[]const bool {
     const char_size = f.char_width * f.char_height;
 
     for (f.chars) |*e| {
-        if (e.cp == c) return f.glyph_data[e.offset .. e.offset + char_size];
+        if (e.cp == cp) return f.glyph_data[e.offset .. e.offset + char_size];
 
         // TODO make this into a hash table or whatever later
-        if (e.cp > c) break;
+        if (e.cp > cp) break;
+    }
+
+    return null;
+}
+
+fn get_char_data(f: *const FontData, cp: u21) []const bool {
+    if (get_individual_char_data(f, cp)) |data| return data;
+
+    // try fallbacks?
+    if (get_char_fallbacks(cp)) |fb_list| {
+        for (fb_list) |fb| {
+            if (get_individual_char_data(f, fb)) |data| return data;
+        }
     }
 
     // unknown char is always stored first
+    const char_size = f.char_width * f.char_height;
     return f.glyph_data[0..char_size];
 }
 
