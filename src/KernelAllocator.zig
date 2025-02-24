@@ -19,10 +19,8 @@ const szEntry = @sizeOf(Entry);
 
 const minimum_block_size = 1024;
 fn round_up_to_block_size(value: usize) usize {
-    var blocks = @divFloor(value, minimum_block_size);
-    const overflow = @mod(value, minimum_block_size);
-    if (overflow > 0) blocks += 1;
-    return blocks * minimum_block_size;
+    const required_blocks = std.math.divCeil(usize, value, minimum_block_size) catch unreachable;
+    return required_blocks * minimum_block_size;
 }
 
 pub const UsageReport = struct {
@@ -87,7 +85,8 @@ pub const KernelAllocator = struct {
 
         const self: *KernelAllocator = @ptrCast(@alignCast(ctx));
         const ptr_align = @as(usize, 1) << @as(std.mem.Allocator.Log2Align, @intCast(log2_ptr_align));
-        const required_bytes = n + ptr_align - 1 + @sizeOf(usize);
+        const required_bytes = n + ptr_align - 1 + @sizeOf(Entry);
+        log.debug("trying to alloc {d} bytes, align {d}: requires {d}", .{ n, ptr_align, required_bytes });
 
         var entry: ?*Entry = self.first;
         while (entry != null) {
@@ -101,7 +100,7 @@ pub const KernelAllocator = struct {
 
                 const remaining_bytes_in_block = e.size - required_bytes;
                 if (remaining_bytes_in_block >= minimum_block_size) {
-                    const taken_size = round_up_to_block_size(minimum_block_size);
+                    const taken_size = round_up_to_block_size(required_bytes);
                     const new_block_size = e.size - taken_size;
                     e.size = taken_size;
 
@@ -284,4 +283,11 @@ test "block splitting and joining" {
     try std.testing.expect(kalloc.first.size == original_size);
 
     ta.free(blk);
+}
+
+test "round up to block size" {
+    try std.testing.expect(round_up_to_block_size(1) == minimum_block_size);
+    try std.testing.expect(round_up_to_block_size(minimum_block_size) == minimum_block_size);
+    try std.testing.expect(round_up_to_block_size(minimum_block_size + 1) == minimum_block_size * 2);
+    try std.testing.expect(round_up_to_block_size(minimum_block_size * 5) == minimum_block_size * 5);
 }
