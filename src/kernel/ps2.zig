@@ -1,10 +1,10 @@
 const std = @import("std");
 const log = std.log.scoped(.ps2);
 
-const acpi = @import("acpi.zig");
+const acpi = @import("../common/acpi.zig");
 const console = @import("console.zig");
 const mf2_keyboard = @import("driver/io/mf2_keyboard.zig");
-const x86 = @import("arch/x86.zig");
+const x86 = @import("../arch/x86.zig");
 
 pub const LEDState = packed struct {
     scroll_lock: bool,
@@ -31,9 +31,6 @@ pub const StatusRegister = packed struct {
     timeout_error: bool,
     parity_error: bool,
 };
-
-// const KEYBOARD_IRQ = 1;
-// const MOUSE_IRQ = 12;
 
 const ConfigByte = packed struct {
     main_interrupt_enabled: bool,

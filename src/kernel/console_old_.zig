@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.console);
 
-const x86 = @import("arch/x86.zig");
+const x86 = @import("../arch/x86.zig");
 
 const VGA_WIDTH = 80;
 const VGA_HEIGHT = 25;

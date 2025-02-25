@@ -32,5 +32,5 @@ fn read_fon(raw: []const u8) console.FontData {
     };
 }
 
-pub const laggy_8x8 = read_fon(@embedFile("fonts/laggy8x8.fon"));
-pub const zero_wing_8x8 = read_fon(@embedFile("fonts/zerowing8x8.fon"));
+pub const laggy_8x8 = read_fon(@embedFile("../fonts/laggy8x8.fon"));
+pub const zero_wing_8x8 = read_fon(@embedFile("../fonts/zerowing8x8.fon"));

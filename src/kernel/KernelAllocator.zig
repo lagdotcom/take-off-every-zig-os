@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.kalloc);
 
-const kernel = @import("kernel.zig");
+pub const MemoryBlock = struct { addr: usize, size: usize };
 
 const entry_magic_number: u32 = 0xfeed2dad;
 
@@ -32,7 +32,7 @@ pub const UsageReport = struct {
 pub const KernelAllocator = struct {
     first: *Entry,
 
-    pub fn init(blocks: []const kernel.MemoryBlock) KernelAllocator {
+    pub fn init(blocks: []const MemoryBlock) KernelAllocator {
         var first: ?*Entry = null;
         var prev: ?*Entry = null;
         for (blocks) |*blk| {

@@ -2,9 +2,9 @@ const std = @import("std");
 const log = std.log.scoped(.pci);
 
 const console = @import("console.zig");
-const kernel = @import("kernel.zig");
 const shell = @import("shell.zig");
-const x86 = @import("arch/x86.zig");
+const video = @import("video.zig");
+const x86 = @import("../arch/x86.zig");
 
 const CONFIG_ADDRESS = 0xcf8;
 const CONFIG_DATA = 0xcfc;
@@ -537,7 +537,7 @@ pub fn brute_force_devices() void {
 }
 
 fn list_pci_devices(_: []const u8) void {
-    console.set_background_colour(kernel.boot_info.video.rgb(64, 64, 64));
+    console.set_background_colour(video.rgb(64, 64, 64));
     console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
     console.set_background_colour(0);
     enumerate_buses();

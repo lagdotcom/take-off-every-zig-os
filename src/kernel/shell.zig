@@ -3,7 +3,7 @@ const log = std.log.scoped(.shell);
 
 const console = @import("console.zig");
 const kb = @import("keyboard.zig");
-const kernel = @import("kernel.zig");
+const video = @import("video.zig");
 
 const utf8_less_than = std.sort.asc([]const u8);
 pub const ShellCommand = struct {
@@ -29,6 +29,7 @@ pub const ShellCommand = struct {
 
 const CommandList = std.ArrayList(ShellCommand);
 
+var allocator: std.mem.Allocator = undefined;
 var shell_commands: CommandList = undefined;
 var shell_running = false;
 
@@ -60,11 +61,12 @@ fn quit_command(_: []const u8) void {
     shell_running = false;
 }
 
-pub fn initialize() void {
+pub fn initialize(kernel_allocator: std.mem.Allocator) void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    shell_commands = CommandList.init(kernel.allocator);
+    allocator = kernel_allocator;
+    shell_commands = CommandList.init(allocator);
     add_command(.{
         .name = "quit",
         .exec = quit_command,
@@ -154,12 +156,12 @@ fn exec_command(cmd_line: []u8, commands: []const ShellCommand) bool {
 pub fn enter() void {
     std.sort.insertion(ShellCommand, shell_commands.items, {}, ShellCommand.less_than);
 
-    const input_buffer = kernel.allocator.alloc(u8, 128) catch unreachable;
-    defer kernel.allocator.free(input_buffer);
+    const input_buffer = allocator.alloc(u8, 128) catch unreachable;
+    defer allocator.free(input_buffer);
 
-    const prompt = kernel.boot_info.video.rgb(255, 255, 0);
-    const text = kernel.boot_info.video.rgb(255, 255, 255);
-    const err_text = kernel.boot_info.video.rgb(255, 192, 0);
+    const prompt = video.rgb(255, 255, 0);
+    const text = video.rgb(255, 255, 255);
+    const err_text = video.rgb(255, 192, 0);
 
     shell_running = true;
     while (shell_running) {

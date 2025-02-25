@@ -2,7 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.keyboard);
 
 const console = @import("console.zig");
-const kernel = @import("kernel.zig");
+const video = @import("video.zig");
 
 pub const Key = enum(u8) {
     tilde = 1,
@@ -298,12 +298,12 @@ pub fn off(key: Key) void {
     // TODO add to buffer
 }
 
-pub fn initialize() void {
+pub fn initialize(allocator: std.mem.Allocator) void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    key_states = kernel.allocator.alloc(bool, @intFromEnum(Key.COUNT)) catch unreachable;
-    key_press_buffer = kernel.allocator.alloc(KeyPressEvent, BUFFER_SIZE) catch unreachable;
+    key_states = allocator.alloc(bool, @intFromEnum(Key.COUNT)) catch unreachable;
+    key_press_buffer = allocator.alloc(KeyPressEvent, BUFFER_SIZE) catch unreachable;
     key_press_read_index = 0;
     key_press_write_index = 0;
 
@@ -312,10 +312,8 @@ pub fn initialize() void {
     num_lock_state = false;
 }
 
-pub fn echo_mode() void {
+pub fn echo_mode(vid: *video.VideoInfo) void {
     console.puts("entering echo mode\n");
-
-    const vid = &kernel.boot_info.video;
 
     while (true) {
         const e = get_key_press();

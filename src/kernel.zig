@@ -1,73 +1,31 @@
 const std = @import("std");
 
-const acpi = @import("acpi.zig");
-const console = @import("console.zig");
-const cpuid = @import("cpuid.zig");
-const gdt = @import("gdt.zig");
-const interrupts = @import("interrupts.zig");
-const KernelAllocator = @import("KernelAllocator.zig").KernelAllocator;
-const keyboard = @import("keyboard.zig");
-const log = @import("log.zig");
-const pci = @import("pci.zig");
-const ps2 = @import("ps2.zig");
-const serial = @import("serial.zig");
-const shell = @import("shell.zig");
-
-pub const MemoryBlock = struct { addr: usize, size: usize };
-
-pub const VideoInfo = struct {
-    framebuffer_addr: u64,
-    framebuffer_size: usize,
-    horizontal: usize,
-    vertical: usize,
-    pixels_per_scan_line: usize,
-    framebuffer: [*]volatile u32,
-    format: std.os.uefi.protocol.GraphicsOutput.PixelFormat,
-
-    pub fn get_index(self: VideoInfo, x: usize, y: usize) usize {
-        return self.pixels_per_scan_line * y + x;
-    }
-
-    pub fn plot(self: VideoInfo, index: usize, colour: u32) void {
-        self.framebuffer[index] = colour;
-    }
-
-    pub fn fill_rectangle(self: VideoInfo, x: usize, y: usize, width: usize, height: usize, colour: u32) void {
-        var index = self.get_index(x, y);
-
-        for (0..height) |_| {
-            @memset(self.framebuffer[index .. index + width], colour);
-            index += self.pixels_per_scan_line;
-        }
-    }
-
-    pub fn fill(self: VideoInfo, colour: u32) void {
-        @memset(self.framebuffer[0..self.framebuffer_size], colour);
-    }
-
-    pub fn rgb(self: VideoInfo, r: u32, g: u32, b: u32) u32 {
-        const r32: u32 = @intCast(r);
-        const g32: u32 = @intCast(g);
-        const b32: u32 = @intCast(b);
-
-        return switch (self.format) {
-            .RedGreenBlueReserved8BitPerColor => (r32) | (g32 << 8) | (b32 << 16) | (0xff000000),
-            .BlueGreenRedReserved8BitPerColor => (b32) | (g32 << 8) | (r32 << 16) | (0xff000000),
-
-            else => std.debug.panic("unknown pixel format: {s}", .{@tagName(self.format)}),
-        };
-    }
-};
+const acpi = @import("common/acpi.zig");
+const console = @import("kernel/console.zig");
+const cpuid = @import("kernel/cpuid.zig");
+const gdt = @import("kernel/gdt.zig");
+const interrupts = @import("kernel/interrupts.zig");
+const KernelAllocator = @import("kernel/KernelAllocator.zig");
+const keyboard = @import("kernel/keyboard.zig");
+const log = @import("kernel/log.zig");
+const pci = @import("kernel/pci.zig");
+const ps2 = @import("kernel/ps2.zig");
+const serial = @import("kernel/serial.zig");
+const shell = @import("kernel/shell.zig");
+const video = @import("kernel/video.zig");
 
 pub const BootInfo = struct {
-    memory: []MemoryBlock,
-    video: VideoInfo,
+    memory: []KernelAllocator.MemoryBlock,
+    video: video.VideoInfo,
     rsdp_entries: []usize,
 };
 
-pub var boot_info: BootInfo = undefined;
-pub var kalloc: KernelAllocator = undefined;
-pub var allocator: std.mem.Allocator = undefined;
+pub const MemoryBlock = KernelAllocator.MemoryBlock;
+pub const VideoInfo = video.VideoInfo;
+
+var boot_info: BootInfo = undefined;
+var kalloc: KernelAllocator.KernelAllocator = undefined;
+var allocator: std.mem.Allocator = undefined;
 
 pub fn kernel_log_fn(
     comptime level: std.log.Level,
@@ -85,8 +43,8 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
     _ = ret_addr;
     kernel_log_fn(.err, .kernel, "!panic! {s}", .{msg});
 
-    console.set_foreground_colour(boot_info.video.rgb(255, 255, 0));
-    console.set_background_colour(boot_info.video.rgb(128, 0, 0));
+    console.set_foreground_colour(video.rgb(255, 255, 0));
+    console.set_background_colour(video.rgb(128, 0, 0));
     console.puts("\n!!! KERNEL PANIC !!!\n");
     console.puts(msg);
 
@@ -103,26 +61,28 @@ pub fn initialize(p: BootInfo) void {
     const com1 = serial.initialize(serial.COM1) catch unreachable;
     log.initialize(com1);
 
-    kalloc = KernelAllocator.init(p.memory);
+    kalloc = KernelAllocator.KernelAllocator.init(p.memory);
     allocator = kalloc.allocator();
 
+    video.initialize(&p.video);
+
     // initialize early so other modules can add their commands to it
-    shell.initialize();
+    shell.initialize(allocator);
 
     gdt.initialize();
 
     console.initialize();
-    console.set_foreground_colour(boot_info.video.rgb(255, 255, 0));
+    console.set_foreground_colour(video.rgb(255, 255, 0));
     console.puts("Take off every 'ZIG'‼\n\n");
 
-    console.set_foreground_colour(boot_info.video.rgb(255, 255, 255));
+    console.set_foreground_colour(video.rgb(255, 255, 255));
 
     cpuid.initialize();
     pci.initialize();
 
     var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
 
-    const tables = acpi.read_acpi_tables(p.rsdp_entries) catch unreachable;
+    const tables = acpi.read_acpi_tables(allocator, p.rsdp_entries) catch unreachable;
     for (tables) |table| {
         switch (table) {
             .fadt => |fadt| {
@@ -143,7 +103,7 @@ pub fn initialize(p: BootInfo) void {
     }
 
     interrupts.initialize();
-    keyboard.initialize();
+    keyboard.initialize(allocator);
 
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);

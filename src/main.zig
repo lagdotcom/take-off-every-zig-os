@@ -3,7 +3,7 @@ const std = @import("std");
 
 const kernel = @import("kernel.zig");
 
-pub const os = @import("os.zig");
+pub const os = @import("env/os.zig");
 
 // TODO figure out how to swap this automatically depending on builtin.zig_version.major
 // version 12+

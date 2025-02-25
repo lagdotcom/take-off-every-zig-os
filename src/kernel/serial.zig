@@ -1,4 +1,4 @@
-const x86 = @import("arch/x86.zig");
+const x86 = @import("../arch/x86.zig");
 
 pub const COM1: u16 = 0x3F8;
 

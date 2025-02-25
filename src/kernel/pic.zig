@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.pic);
 
-const x86 = @import("arch/x86.zig");
+const x86 = @import("../arch/x86.zig");
 
 const PIC1_COMMAND: u16 = 0x20;
 const PIC1_DATA: u16 = 0x21;

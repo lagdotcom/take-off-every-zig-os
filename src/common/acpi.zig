@@ -1,7 +1,4 @@
 const std = @import("std");
-const log = std.log.scoped(.acpi);
-
-const kernel = @import("kernel.zig");
 
 pub const RSDP_v1 = extern struct {
     signature: [8]u8,
@@ -286,8 +283,8 @@ fn read_acpi_table(ptr: usize) ACPITable {
     return .{ .unknown = header };
 }
 
-pub fn read_acpi_tables(pointers: []usize) ![]ACPITable {
-    const tables: []ACPITable = try kernel.allocator.alloc(ACPITable, pointers.len);
+pub fn read_acpi_tables(allocator: std.mem.Allocator, pointers: []usize) ![]ACPITable {
+    const tables: []ACPITable = try allocator.alloc(ACPITable, pointers.len);
 
     for (pointers, 0..) |ptr, i| tables[i] = read_acpi_table(ptr);
 

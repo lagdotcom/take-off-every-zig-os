@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const console = @import("console.zig");
-const x86 = @import("arch/x86.zig");
+const x86 = @import("../arch/x86.zig");
 
 pub fn vendor_string_3(res: x86.CPUIDResults) [12]u8 {
     return .{

@@ -1,10 +1,9 @@
 const std = @import("std");
 const log = std.log.scoped(.console);
 
-const kernel = @import("kernel.zig");
 const fonts = @import("fonts.zig");
+const video = @import("video.zig");
 
-var video = &kernel.boot_info.video;
 var cursor_x: usize = 0;
 var cursor_y: usize = 0;
 var current_font: *const FontData = undefined;
@@ -12,6 +11,9 @@ var fg_colour: u32 = 0xffffffff;
 var bg_colour: u32 = 0;
 
 pub fn initialize() void {
+    log.debug("initializing", .{});
+    defer log.debug("done", .{});
+
     clear();
 }
 
@@ -58,19 +60,19 @@ pub fn putc(c: u21) void {
     } else if (c == '\t') {
         const tab_size = current_font.char_width * 4;
         const offset = tab_size - (cursor_x % tab_size);
-        const ex = @min(cursor_x + offset, video.horizontal);
+        const ex = @min(cursor_x + offset, video.vga.horizontal);
 
         if (ex > cursor_x)
             video.fill_rectangle(cursor_x, cursor_y, ex - cursor_x, current_font.char_height, bg_colour);
 
-        if (ex >= video.horizontal) {
+        if (ex >= video.vga.horizontal) {
             new_line();
         } else {
             cursor_x = ex;
         }
     } else {
         cursor_x += if (put_char_or_space(c)) current_font.char_width else current_font.space_width;
-        if (cursor_x >= video.horizontal) new_line();
+        if (cursor_x >= video.vga.horizontal) new_line();
     }
 }
 
@@ -85,7 +87,7 @@ pub fn replace_last_char(s: []const u8, move: bool) void {
         }
 
         new_y -= current_font.char_height;
-        new_x = video.horizontal - current_font.char_width;
+        new_x = video.vga.horizontal - current_font.char_width;
     } else {
         new_x -= current_font.char_width;
     }
@@ -104,7 +106,7 @@ pub fn replace_last_char(s: []const u8, move: bool) void {
 pub fn new_line() void {
     cursor_x = 0;
     cursor_y += current_font.char_height;
-    if (cursor_y >= video.vertical) scroll_down();
+    if (cursor_y >= video.vga.vertical) scroll_down();
 }
 
 pub const printf_writer = std.io.Writer(void, error{}, printf_callback){ .context = {} };
@@ -119,27 +121,27 @@ pub fn printf(comptime format: []const u8, args: anytype) void {
 }
 
 fn scroll_down() void {
-    const row_size = video.pixels_per_scan_line * current_font.char_height;
-    const stop_copying_at = video.pixels_per_scan_line * (video.vertical - current_font.char_height);
+    const row_size = video.vga.pixels_per_scan_line * current_font.char_height;
+    const stop_copying_at = video.vga.pixels_per_scan_line * (video.vga.vertical - current_font.char_height);
 
     var offset: usize = 0;
     while (offset < stop_copying_at) {
         @memcpy(
-            video.framebuffer[offset .. offset + row_size],
-            video.framebuffer[offset + row_size .. offset + row_size + row_size],
+            video.vga.framebuffer[offset .. offset + row_size],
+            video.vga.framebuffer[offset + row_size .. offset + row_size + row_size],
         );
 
         offset += row_size;
     }
 
-    @memset(video.framebuffer[stop_copying_at..video.framebuffer_size], 0);
+    @memset(video.vga.framebuffer[stop_copying_at..video.vga.framebuffer_size], 0);
 
     cursor_y -= current_font.char_height;
 }
 
 fn put_font_char(c: u21) void {
     var i = video.get_index(cursor_x, cursor_y);
-    const stride = video.pixels_per_scan_line - current_font.char_width;
+    const stride = video.vga.pixels_per_scan_line - current_font.char_width;
 
     const cd = get_char_data(current_font, c);
 

@@ -3,7 +3,7 @@ const log = std.log.scoped(.interrupts);
 
 const gdt = @import("gdt.zig");
 const pic = @import("pic.zig");
-const x86 = @import("arch/x86.zig");
+const x86 = @import("../arch/x86.zig");
 
 pub const ErrorInterrupt = enum(u8) {
     divide_error = 0,
