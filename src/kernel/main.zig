@@ -1,18 +1,18 @@
 const std = @import("std");
 
-const acpi = @import("common/acpi.zig");
-const console = @import("kernel/console.zig");
-const cpuid = @import("kernel/cpuid.zig");
-const gdt = @import("kernel/gdt.zig");
-const interrupts = @import("kernel/interrupts.zig");
-const KernelAllocator = @import("kernel/KernelAllocator.zig");
-const keyboard = @import("kernel/keyboard.zig");
-const log = @import("kernel/log.zig");
-const pci = @import("kernel/pci.zig");
-const ps2 = @import("kernel/ps2.zig");
-const serial = @import("kernel/serial.zig");
-const shell = @import("kernel/shell.zig");
-const video = @import("kernel/video.zig");
+const acpi = @import("../common/acpi.zig");
+const console = @import("console.zig");
+const cpuid = @import("cpuid.zig");
+const gdt = @import("gdt.zig");
+const interrupts = @import("interrupts.zig");
+const KernelAllocator = @import("KernelAllocator.zig");
+const keyboard = @import("keyboard.zig");
+const log = @import("log.zig");
+const pci = @import("pci.zig");
+const ps2 = @import("ps2.zig");
+const serial = @import("serial.zig");
+const shell = @import("shell.zig");
+const video = @import("video.zig");
 
 pub const BootInfo = struct {
     memory: []KernelAllocator.MemoryBlock,

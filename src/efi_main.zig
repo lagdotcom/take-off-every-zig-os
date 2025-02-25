@@ -3,7 +3,7 @@ const uefi = std.os.uefi;
 const L = std.unicode.utf8ToUtf16LeStringLiteral;
 
 const acpi = @import("common/acpi.zig");
-const kernel = @import("kernel.zig");
+const kernel = @import("kernel/main.zig");
 
 pub const std_options = .{ .log_level = .debug, .logFn = kernel.kernel_log_fn };
 
