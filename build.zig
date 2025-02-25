@@ -49,7 +49,7 @@ fn convert_font_txt(step: *std.Build.Step, node: std.Progress.Node) !void {
     var argv = std.ArrayList([]const u8).init(allocator);
     try argv.append("zig"); // TODO does this work with zigup build?
     try argv.append("run");
-    try argv.append("tools/convert_font_txt.zig");
+    try argv.append("src/convert_font_txt.zig");
     try argv.append("--");
 
     const dir = try std.fs.cwd().openDir(fonts_dir, .{ .iterate = true });

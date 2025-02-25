@@ -224,12 +224,10 @@ fn get_char_data(f: *const FontData, cp: u21) []const bool {
     return f.glyph_data[0..char_size];
 }
 
-pub const CharEntry = extern struct { cp: u32, offset: u32 };
-
 pub const FontData = struct {
     char_width: u16,
     char_height: u16,
     space_width: u16,
-    chars: []const CharEntry,
+    chars: []const fonts.FONEntry,
     glyph_data: []const bool,
 };

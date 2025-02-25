@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const fonts = @import("kernel/fonts.zig");
+
 fn read_usize_line(r: std.fs.File.Reader) !usize {
     var value: usize = 0;
     var first = true;
@@ -74,16 +76,6 @@ fn get_next_glyph(allocator: std.mem.Allocator, r: std.fs.File.Reader, w: usize,
     }
 }
 
-const CharEntry = extern struct {
-    cp: u32,
-    offset: u32,
-
-    fn less_than(_: void, a: CharEntry, b: CharEntry) bool {
-        if (a.cp == b.cp) std.debug.panic("font has duplicate codepoint: {d}", .{a.cp});
-        return a.cp < b.cp;
-    }
-};
-
 fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
     // std.log.debug("reading: {s}", .{path});
     const f = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
@@ -102,7 +94,7 @@ fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
     out_filename[out_filename.len - 2] = 'o';
     out_filename[out_filename.len - 1] = 'n';
 
-    var entries = std.ArrayList(CharEntry).init(allocator);
+    var entries = std.ArrayList(fonts.FONEntry).init(allocator);
     var glyph_bits = try std.mem.concat(allocator, bool, &.{unknown_char});
 
     while (try get_next_glyph(allocator, r, char_width, char_height)) |g| {
@@ -110,7 +102,7 @@ fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
         glyph_bits = try std.mem.concat(allocator, bool, &.{ glyph_bits, g.bits });
     }
 
-    std.sort.insertion(CharEntry, entries.items, {}, CharEntry.less_than);
+    std.sort.insertion(fonts.FONEntry, entries.items, {}, fonts.FONEntry.less_than);
 
     f.close();
 
@@ -119,12 +111,13 @@ fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
     defer o.close();
 
     const ow = o.writer();
-    _ = try ow.write("TOEZFONm");
-    try ow.writeInt(u16, @intCast(char_width), .little);
-    try ow.writeInt(u16, @intCast(char_height), .little);
-    try ow.writeInt(u16, @intCast(space_width), .little);
-
-    try ow.writeInt(u16, @intCast(entries.items.len), .little);
+    try ow.writeStruct(fonts.FONHeader{
+        .magic = fonts.fon_header_magic[0..8].*,
+        .char_width = @intCast(char_width),
+        .char_height = @intCast(char_height),
+        .space_width = @intCast(space_width),
+        .entry_count = @intCast(entries.items.len),
+    });
 
     for (entries.items) |e| {
         try ow.writeInt(u32, e.cp, .little);
