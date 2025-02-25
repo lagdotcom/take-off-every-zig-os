@@ -4,7 +4,7 @@ const log = std.log.scoped(.pci);
 const console = @import("console.zig");
 const kernel = @import("kernel.zig");
 const shell = @import("shell.zig");
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 const CONFIG_ADDRESS = 0xcf8;
 const CONFIG_DATA = 0xcfc;
@@ -23,12 +23,12 @@ pub const ConfigAddress = packed struct {
 };
 
 pub fn read_config_address() ConfigAddress {
-    return @bitCast(utils.inl(CONFIG_ADDRESS));
+    return @bitCast(x86.inl(CONFIG_ADDRESS));
 }
 
 pub fn config_read_long(addr: ConfigAddress) u32 {
-    utils.outl(CONFIG_ADDRESS, @bitCast(addr));
-    return utils.inl(CONFIG_DATA);
+    x86.outl(CONFIG_ADDRESS, @bitCast(addr));
+    return x86.inl(CONFIG_DATA);
 }
 
 pub fn get_device_config(bus: PCIBus, slot: PCISlot, function: PCIFunction, offset: u8) u32 {

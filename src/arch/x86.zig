@@ -92,3 +92,43 @@ pub inline fn cpuid(code: CPUIDRequest) CPUIDResults {
 
     return .{ .a = a, .b = b, .c = c, .d = d };
 }
+
+pub const IDTDescriptor = packed struct {
+    limit: u16,
+    base: u32,
+};
+
+pub inline fn lidt(ptr: *IDTDescriptor) void {
+    asm volatile ("lidt (%%eax)"
+        :
+        : [ptr] "{eax}" (ptr),
+    );
+}
+
+pub const EFLAGS = packed struct {
+    cf: bool,
+    reserved_1: bool,
+    pf: bool,
+    reserved_3: bool,
+    af: bool,
+    reserved_5: bool,
+    zf: bool,
+    sf: bool,
+    tf: bool,
+    @"if": bool,
+    df: bool,
+    of: bool,
+    iopl: u2,
+    nt: bool,
+    md: bool,
+
+    rf: bool,
+    vm: bool,
+    ac: bool,
+    vif: bool,
+    vip: bool,
+    id: bool,
+    reserved_22: u8,
+    aes: bool,
+    ai: bool,
+};

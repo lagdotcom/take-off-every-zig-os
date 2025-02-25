@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.console);
 
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 const VGA_WIDTH = 80;
 const VGA_HEIGHT = 25;
@@ -114,10 +114,10 @@ pub fn printf(comptime format: []const u8, args: anytype) void {
 fn move_hardware_cursor() void {
     const position = term.row * 80 + term.column;
     // log.debug("updating hardware cursor to {x} ({d},{d})", .{ position, term.column, term.row });
-    utils.outb(0x3D4, 0x0F);
-    utils.outb(0x3D5, @truncate(position));
-    utils.outb(0x3D4, 0x0E);
-    utils.outb(0x3D5, @truncate(position >> 8));
+    x86.outb(0x3D4, 0x0F);
+    x86.outb(0x3D5, @truncate(position));
+    x86.outb(0x3D4, 0x0E);
+    x86.outb(0x3D5, @truncate(position >> 8));
 }
 
 fn vga_row_offset(y: usize) usize {

@@ -1,4 +1,4 @@
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 pub const COM1: u16 = 0x3F8;
 
@@ -87,11 +87,11 @@ pub const Port = struct {
     }
 
     pub fn read_offset(self: Port, offset: u16) u8 {
-        return utils.inb(self.address + offset);
+        return x86.inb(self.address + offset);
     }
 
     pub fn write_offset(self: Port, offset: u16, value: u8) void {
-        utils.outb(self.address + offset, value);
+        x86.outb(self.address + offset, value);
     }
 
     pub fn set_interrupts(self: Port, data_available: bool, transmitter_empty: bool, receiver_line_status: bool, modem_status: bool) void {

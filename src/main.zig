@@ -3,15 +3,6 @@ const std = @import("std");
 
 const kernel = @import("kernel.zig");
 
-const console = @import("console.zig");
-const cpuid = @import("cpuid.zig");
-const gdt = @import("gdt.zig");
-const keyboard = @import("keyboard.zig");
-const kernel_log = @import("log.zig");
-const pci = @import("pci.zig");
-const serial = @import("serial.zig");
-const utils = @import("utils.zig");
-
 pub const os = @import("os.zig");
 
 // TODO figure out how to swap this automatically depending on builtin.zig_version.major

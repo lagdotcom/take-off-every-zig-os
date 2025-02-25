@@ -3,7 +3,7 @@ const log = std.log.scoped(.interrupts);
 
 const gdt = @import("gdt.zig");
 const pic = @import("pic.zig");
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 pub const ErrorInterrupt = enum(u8) {
     divide_error = 0,
@@ -85,51 +85,12 @@ pub const IDTHandler = fn () callconv(.Naked) void;
 pub const InterruptHandler = *const fn (ctx: *CpuState) usize;
 var interrupt_handlers: [MAX_DESCRIPTORS]?InterruptHandler = [_]?InterruptHandler{null} ** MAX_DESCRIPTORS;
 
-pub const IDTDescriptor = packed struct {
-    limit: u16,
-    base: u32,
-};
-var idt_ptr: IDTDescriptor = .{
+var idt_ptr: x86.IDTDescriptor = .{
     .base = 0,
     .limit = 0,
 };
 
-fn lidt(ptr: *IDTDescriptor) void {
-    log.debug("lidt {*} -- {x}:{d}", .{ ptr, ptr.base, ptr.limit });
-    asm volatile ("lidt (%%eax)"
-        :
-        : [ptr] "{eax}" (ptr),
-    );
-}
-
-pub const EFLAGS = packed struct {
-    cf: bool,
-    reserved_1: bool,
-    pf: bool,
-    reserved_3: bool,
-    af: bool,
-    reserved_5: bool,
-    zf: bool,
-    sf: bool,
-    tf: bool,
-    @"if": bool,
-    df: bool,
-    of: bool,
-    iopl: u2,
-    nt: bool,
-    md: bool,
-
-    rf: bool,
-    vm: bool,
-    ac: bool,
-    vif: bool,
-    vip: bool,
-    id: bool,
-    reserved_22: u8,
-    aes: bool,
-    ai: bool,
-};
-
+// TODO move majority of this into arch/x86 lol
 pub const CpuState = packed struct {
     // Page directory
     cr3: usize,
@@ -159,7 +120,7 @@ pub const CpuState = packed struct {
     // Instruction pointer, code segment and flags
     eip: u32,
     cs: u32,
-    eflags: EFLAGS,
+    eflags: x86.EFLAGS,
     user_esp: u32,
     user_ss: u32,
 
@@ -304,8 +265,8 @@ fn setup_idt() void {
     inline for (0..48) |vector|
         set_descriptor(vector, generate_int_stub(vector), .{ .present = true, .gate_type = if (vector < IRQ_START_INDEX) .trap_32 else .interrupt_32 });
 
-    lidt(&idt_ptr);
-    utils.sti();
+    x86.lidt(&idt_ptr);
+    x86.sti();
 }
 
 fn setup_pic() void {

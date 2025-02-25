@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.gdt);
 
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 pub const AccessDescriptorType = enum(u1) {
     system,

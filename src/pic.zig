@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.pic);
 
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 const PIC1_COMMAND: u16 = 0x20;
 const PIC1_DATA: u16 = 0x21;
@@ -38,22 +38,22 @@ const OCW3 = packed struct {
 };
 
 fn send_pic1_icw1(cmd: ICW1) void {
-    utils.outb(PIC1_COMMAND, @bitCast(cmd));
-    utils.io_wait();
+    x86.outb(PIC1_COMMAND, @bitCast(cmd));
+    x86.io_wait();
 }
 
 fn send_pic2_icw1(cmd: ICW1) void {
-    utils.outb(PIC2_COMMAND, @bitCast(cmd));
-    utils.io_wait();
+    x86.outb(PIC2_COMMAND, @bitCast(cmd));
+    x86.io_wait();
 }
 
 pub fn clear_mask(irq: u8) void {
     const port = if (irq < 8) PIC1_DATA else PIC2_DATA;
     const shift: u3 = @intCast(irq % 8);
     const mask: u8 = ~(@as(u8, 1) << shift);
-    const old_value = utils.inb(port);
+    const old_value = x86.inb(port);
     const value = old_value & mask;
-    utils.outb(port, value);
+    x86.outb(port, value);
 
     log.debug("clear_mask: port={x} old={x} new={x}", .{ port, old_value, value });
 }
@@ -62,27 +62,27 @@ pub fn remap(offset_1: u8, offset_2: u8) void {
     send_pic1_icw1(.{ .init = true, .icw4_present = true });
     send_pic2_icw1(.{ .init = true, .icw4_present = true });
 
-    utils.outb(PIC1_DATA, offset_1);
-    utils.io_wait();
+    x86.outb(PIC1_DATA, offset_1);
+    x86.io_wait();
 
-    utils.outb(PIC2_DATA, offset_2);
-    utils.io_wait();
+    x86.outb(PIC2_DATA, offset_2);
+    x86.io_wait();
 
-    utils.outb(PIC1_DATA, 4); // PIC2 is at IRQ2
-    utils.io_wait();
+    x86.outb(PIC1_DATA, 4); // PIC2 is at IRQ2
+    x86.io_wait();
 
-    utils.outb(PIC2_DATA, 2); // PIC2 identity = 2
-    utils.io_wait();
+    x86.outb(PIC2_DATA, 2); // PIC2 identity = 2
+    x86.io_wait();
 
-    utils.outb(PIC1_DATA, @intFromEnum(ICW4._8086));
-    utils.io_wait();
+    x86.outb(PIC1_DATA, @intFromEnum(ICW4._8086));
+    x86.io_wait();
 
-    utils.outb(PIC2_DATA, @intFromEnum(ICW4._8086));
-    utils.io_wait();
+    x86.outb(PIC2_DATA, @intFromEnum(ICW4._8086));
+    x86.io_wait();
 
     // fully mask both PICs
-    utils.outb(PIC1_DATA, 0xff);
-    utils.outb(PIC2_DATA, 0xff);
+    x86.outb(PIC1_DATA, 0xff);
+    x86.outb(PIC2_DATA, 0xff);
 }
 
 pub fn eoi(irq: u8) void {
@@ -91,13 +91,13 @@ pub fn eoi(irq: u8) void {
 }
 
 fn pic1_isr() u8 {
-    utils.outb(PIC1_COMMAND, @bitCast(OCW3{ .read_isr = true, .act_on_read = true }));
-    return utils.inb(PIC1_COMMAND);
+    x86.outb(PIC1_COMMAND, @bitCast(OCW3{ .read_isr = true, .act_on_read = true }));
+    return x86.inb(PIC1_COMMAND);
 }
 
 fn pic2_isr() u8 {
-    utils.outb(PIC2_COMMAND, @bitCast(OCW3{ .read_isr = true, .act_on_read = true }));
-    return utils.inb(PIC2_COMMAND);
+    x86.outb(PIC2_COMMAND, @bitCast(OCW3{ .read_isr = true, .act_on_read = true }));
+    return x86.inb(PIC2_COMMAND);
 }
 
 pub fn is_spurious(irq: u8) bool {

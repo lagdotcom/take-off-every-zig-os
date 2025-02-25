@@ -1,9 +1,9 @@
 const std = @import("std");
 
 const console = @import("console.zig");
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
-pub fn vendor_string_3(res: utils.CPUIDResults) [12]u8 {
+pub fn vendor_string_3(res: x86.CPUIDResults) [12]u8 {
     return .{
         @intCast(res.b & 0xff),
         @intCast((res.b & 0xff00) >> 8),
@@ -20,7 +20,7 @@ pub fn vendor_string_3(res: utils.CPUIDResults) [12]u8 {
     };
 }
 
-pub fn vendor_string_4(res: utils.CPUIDResults) [16]u8 {
+pub fn vendor_string_4(res: x86.CPUIDResults) [16]u8 {
     return .{
         @intCast(res.a & 0xff),
         @intCast((res.a & 0xff00) >> 8),
@@ -42,15 +42,15 @@ pub fn vendor_string_4(res: utils.CPUIDResults) [16]u8 {
 }
 
 fn show_vendor() Manufacturer {
-    const result = utils.cpuid(.get_vendor_id_string);
+    const result = x86.cpuid(.get_vendor_id_string);
     const vendor = vendor_string_3(result);
     console.printf("CPUID: {s} ({d}fn)", .{ vendor, result.a });
 
-    const extended_result = utils.cpuid(.intel_extended);
-    if (extended_result.a >= @intFromEnum(utils.CPUIDRequest.intel_brand_string_end)) {
-        const brand0 = vendor_string_4(utils.cpuid(.intel_brand_string));
-        const brand1 = vendor_string_4(utils.cpuid(.intel_brand_string_more));
-        const brand2 = vendor_string_4(utils.cpuid(.intel_brand_string_end));
+    const extended_result = x86.cpuid(.intel_extended);
+    if (extended_result.a >= @intFromEnum(x86.CPUIDRequest.intel_brand_string_end)) {
+        const brand0 = vendor_string_4(x86.cpuid(.intel_brand_string));
+        const brand1 = vendor_string_4(x86.cpuid(.intel_brand_string_more));
+        const brand2 = vendor_string_4(x86.cpuid(.intel_brand_string_end));
 
         console.printf(" [{s}{s}{s}]", .{ brand0, brand1, brand2 });
     }
@@ -348,7 +348,7 @@ fn guess_cpu(mfc: Manufacturer, a: EAXFeatures) []const u8 {
 }
 
 fn show_features(mfc: Manufacturer) void {
-    const features_result = utils.cpuid(.get_features);
+    const features_result = x86.cpuid(.get_features);
 
     const a: EAXFeatures = @bitCast(features_result.a);
     const family: u8 = if (a.family == 15) a.family + a.family_extended else a.family;

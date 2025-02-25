@@ -4,7 +4,7 @@ const log = std.log.scoped(.ps2);
 const acpi = @import("acpi.zig");
 const console = @import("console.zig");
 const mf2_keyboard = @import("driver/io/mf2_keyboard.zig");
-const utils = @import("utils.zig");
+const x86 = @import("arch/x86.zig");
 
 pub const LEDState = packed struct {
     scroll_lock: bool,
@@ -122,7 +122,7 @@ fn debug_status(status: StatusRegister) void {
 }
 
 fn get_status() StatusRegister {
-    const status: StatusRegister = @bitCast(utils.inb(PS2_STATUS_PORT));
+    const status: StatusRegister = @bitCast(x86.inb(PS2_STATUS_PORT));
     // debug_status(status);
     return status;
 }
@@ -158,10 +158,10 @@ const io_timeout_attempts = 10;
 fn send_command(cmd: ControllerCommand) void {
     log.debug("send_command: {s}", .{@tagName(cmd)});
 
-    utils.io_wait();
+    x86.io_wait();
     for (0..io_timeout_attempts) |_| {
         if (!get_status().input_full)
-            return utils.outb(PS2_COMMAND_PORT, @intFromEnum(cmd));
+            return x86.outb(PS2_COMMAND_PORT, @intFromEnum(cmd));
     }
 
     log.warn("timeout on send_command: {s}", .{@tagName(cmd)});
@@ -170,10 +170,10 @@ fn send_command(cmd: ControllerCommand) void {
 fn send_device_command(cmd: DeviceCommand) void {
     log.debug("send_device_command: {s}", .{@tagName(cmd)});
 
-    utils.io_wait();
+    x86.io_wait();
     for (0..io_timeout_attempts) |_| {
         if (!get_status().input_full)
-            return utils.outb(PS2_DATA_PORT, @intFromEnum(cmd));
+            return x86.outb(PS2_DATA_PORT, @intFromEnum(cmd));
     }
 
     log.debug("timeout on send_device_command: {s}", .{@tagName(cmd)});
@@ -182,21 +182,21 @@ fn send_device_command(cmd: DeviceCommand) void {
 pub fn send_data(byte: u8) void {
     log.debug("send_data: {d}/{x}", .{ byte, byte });
 
-    utils.io_wait();
+    x86.io_wait();
     for (0..io_timeout_attempts) |_| {
         if (!get_status().input_full)
-            return utils.outb(PS2_DATA_PORT, byte);
+            return x86.outb(PS2_DATA_PORT, byte);
     }
 
     log.warn("timeout on send_data: {d}/{x}", .{ byte, byte });
 }
 
 pub fn get_data() u8 {
-    utils.io_wait();
+    x86.io_wait();
     for (0..io_timeout_attempts) |_| {
         if (get_status().output_full) {
-            utils.io_wait();
-            const value = utils.inb(PS2_DATA_PORT);
+            x86.io_wait();
+            const value = x86.inb(PS2_DATA_PORT);
             log.debug("get_reply_byte: {d}/{x}", .{ value, value });
             return value;
         }
@@ -209,8 +209,8 @@ pub fn get_data() u8 {
 pub fn maybe_get_data() ?u8 {
     for (0..io_timeout_attempts) |_| {
         if (get_status().output_full) {
-            utils.io_wait();
-            return utils.inb(PS2_DATA_PORT);
+            x86.io_wait();
+            return x86.inb(PS2_DATA_PORT);
         }
     }
 
@@ -291,7 +291,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     send_command(.disable_aux);
 
     // Step 4: Flush The Output Buffer
-    _ = utils.inb(PS2_DATA_PORT);
+    _ = x86.inb(PS2_DATA_PORT);
 
     // Step 5: Set the Controller Configuration Byte
     {
