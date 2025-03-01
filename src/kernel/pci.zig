@@ -2,6 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.pci);
 
 const console = @import("console.zig");
+const drivers = @import("driver/pci.zig");
 const shell = @import("shell.zig");
 const video = @import("video.zig");
 const x86 = @import("../arch/x86.zig");
@@ -18,8 +19,8 @@ pub const ConfigAddress = packed struct {
     function_number: PCIFunction,
     device_number: PCISlot,
     bus_number: PCIBus,
-    reserved: u7,
-    enable_bit: bool,
+    reserved: u7 = 0,
+    enable_bit: bool = true,
 };
 
 pub fn read_config_address() ConfigAddress {
@@ -31,15 +32,40 @@ pub fn config_read_long(addr: ConfigAddress) u32 {
     return x86.inl(CONFIG_DATA);
 }
 
+pub fn config_write_byte(addr: ConfigAddress, value: u8) void {
+    x86.outl(CONFIG_ADDRESS, @bitCast(addr));
+    x86.outb(CONFIG_DATA, value);
+}
+
+pub fn config_write_long(addr: ConfigAddress, value: u32) void {
+    x86.outl(CONFIG_ADDRESS, @bitCast(addr));
+    x86.outl(CONFIG_DATA, value);
+}
+
 pub fn get_device_config(bus: PCIBus, slot: PCISlot, function: PCIFunction, offset: u8) u32 {
-    return config_read_long(ConfigAddress{
+    return config_read_long(.{
         .register_offset = offset,
         .function_number = function,
         .device_number = slot,
         .bus_number = bus,
-        .reserved = 0,
-        .enable_bit = true,
     });
+}
+
+pub fn config_read_struct(comptime T: type, bus: PCIBus, slot: PCISlot, function: PCIFunction, obj: *T) void {
+    std.debug.assert(@mod(@sizeOf(T), @sizeOf(u32)) == 0);
+    std.debug.assert(@sizeOf(T) <= std.math.maxInt(u8));
+    const raw_pointer: [*]u32 = @ptrCast(obj);
+
+    var u32_offset: u8 = 0;
+    while (u32_offset < @divExact(@sizeOf(T), @sizeOf(u32))) {
+        raw_pointer[u32_offset] = config_read_long(.{
+            .register_offset = u32_offset << 2,
+            .function_number = function,
+            .device_number = slot,
+            .bus_number = bus,
+        });
+        u32_offset += 1;
+    }
 }
 
 pub const DeviceID = struct {
@@ -723,68 +749,81 @@ fn show_full_device_info(bus: usize, slot: usize, function: usize, h: DeviceHead
     }
 }
 
-fn show_brief_device_info(bus: usize, slot: usize, function: usize, h: DeviceHeader) void {
+fn show_brief_device_info(bus: usize, slot: usize, function: usize, h: *const DeviceHeader) void {
     console.printf("{d}:{d}:{d}\t{x:0>4}:{x:0>4}\t{s}\t{s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, get_vendor_name(h.vendor_id), get_device_class(h.class_code, h.subclass, h.programming_interface) });
 }
 
-fn show_device_info(bus: PCIBus, slot: PCISlot, function: PCIFunction, h: DeviceHeader) void {
-    show_brief_device_info(bus, slot, function, h);
-    show_full_device_info(bus, slot, function, h);
-}
+const PCIEnumerationCallback = fn (bus: PCIBus, slot: PCISlot, function: PCIFunction, h: *const DeviceHeader) void;
 
-fn check_function(bus: PCIBus, slot: PCISlot, function: PCIFunction) void {
+fn check_function(cb: PCIEnumerationCallback, bus: PCIBus, slot: PCISlot, function: PCIFunction) void {
     if (get_device_header(bus, slot, function)) |h| {
-        show_device_info(bus, slot, function, h);
+        cb(bus, slot, function, &h);
 
         if (h.pci_to_pci_bridge) |p| {
-            enumerate_bus(p.secondary_bus_number);
+            enumerate_bus(cb, p.secondary_bus_number);
         }
     }
 }
 
-fn check_device(bus: PCIBus, slot: PCISlot) void {
+fn check_device(cb: PCIEnumerationCallback, bus: PCIBus, slot: PCISlot) void {
     if (get_device_header(bus, slot, 0)) |h| {
-        show_device_info(bus, slot, 0, h);
+        cb(bus, slot, 0, &h);
 
         if (h.header_type.multi_function) {
             for (1..8) |function|
-                check_function(bus, slot, @intCast(function));
+                check_function(cb, bus, slot, @intCast(function));
         }
     }
 }
 
-fn enumerate_bus(bus: PCIBus) void {
+fn enumerate_bus(cb: PCIEnumerationCallback, bus: PCIBus) void {
     for (0..32) |slot| {
-        check_device(bus, @intCast(slot));
+        check_device(cb, bus, @intCast(slot));
     }
 }
 
-pub fn enumerate_buses() void {
+pub fn enumerate_buses(cb: PCIEnumerationCallback) void {
     for (0..256) |bus| {
-        enumerate_bus(@intCast(bus));
+        enumerate_bus(cb, @intCast(bus));
     }
 }
 
-pub fn brute_force_devices() void {
+pub fn brute_force_devices(cb: PCIEnumerationCallback) void {
     for (0..256) |bus| {
         for (0..32) |slot| {
             for (0..8) |function| {
-                if (get_device_header(@intCast(bus), @intCast(slot), @intCast(function))) |h| {
-                    show_device_info(bus, slot, function, h);
-                }
+                if (get_device_header(@intCast(bus), @intCast(slot), @intCast(function))) |h|
+                    cb(bus, slot, function, &h);
             }
         }
     }
+}
+
+fn show_device_callback(bus: PCIBus, slot: PCISlot, function: PCIFunction, h: *const DeviceHeader) void {
+    show_brief_device_info(bus, slot, function, h);
 }
 
 fn list_pci_devices(_: []const u8) void {
     console.set_background_colour(video.rgb(64, 64, 64));
     console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
     console.set_background_colour(0);
-    enumerate_buses();
+    enumerate_buses(show_device_callback);
 }
 
-pub fn initialize() void {
+pub const DriverStatus = enum(u8) {
+    stopped,
+    starting,
+    running,
+};
+
+pub const PCIDriver = struct {
+    attach: *const fn (bus: PCIBus, slot: PCISlot, function: PCIFunction) void,
+    get_status: *const fn () DriverStatus,
+};
+const PCIDriverMap = std.AutoHashMap(DeviceID, *const PCIDriver);
+var pci_driver_map: PCIDriverMap = undefined;
+
+pub fn initialize(allocator: std.mem.Allocator) void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
@@ -799,4 +838,23 @@ pub fn initialize() void {
             },
         },
     });
+
+    pci_driver_map = PCIDriverMap.init(allocator);
+    drivers.initialize(allocator);
+    enumerate_buses(start_driver);
+}
+
+pub fn add_driver(id: DeviceID, driver: *const PCIDriver) void {
+    pci_driver_map.put(id, driver) catch unreachable;
+}
+
+fn start_driver(bus: PCIBus, slot: PCISlot, function: PCIFunction, h: *const DeviceHeader) void {
+    const id = DeviceID{ .vendor_id = h.vendor_id, .device_id = h.device_id };
+
+    if (pci_driver_map.get(id)) |driver| {
+        if (driver.get_status() == .stopped) {
+            log.debug("attempting to start driver for {x}:{x}", .{ id.vendor_id, id.device_id });
+            driver.attach(bus, slot, function);
+        }
+    } else log.warn("no driver found for {x}:{x}", .{ id.vendor_id, id.device_id });
 }

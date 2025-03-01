@@ -123,7 +123,7 @@ pub fn main() uefi.Status {
         const d: *uefi.tables.MemoryDescriptor = @alignCast(@ptrCast(map_block[offset .. offset + @sizeOf(uefi.tables.MemoryDescriptor)]));
 
         if (d.type == .ConventionalMemory or d.type == .BootServicesCode or d.type == .BootServicesData) {
-            const size = 4 * 1024 * d.number_of_pages;
+            const size = std.mem.page_size * d.number_of_pages;
             total_available += size;
             mem_block_count += 1;
         }
@@ -161,7 +161,7 @@ pub fn main() uefi.Status {
         const offset = i * descriptor_size;
         const d: *uefi.tables.MemoryDescriptor = @alignCast(@ptrCast(map_block[offset .. offset + @sizeOf(uefi.tables.MemoryDescriptor)]));
 
-        const size = 4 * 1024 * d.number_of_pages;
+        const size = std.mem.page_size * d.number_of_pages;
         const addr = d.physical_start;
 
         if (d.type == .ConventionalMemory or d.type == .BootServicesCode or d.type == .BootServicesData) {

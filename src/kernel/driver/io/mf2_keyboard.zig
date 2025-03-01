@@ -320,12 +320,6 @@ pub fn initialize(is_aux: bool) void {
     driver.aux = is_aux;
     driver.state = s_normal;
 
-    // clear any remaining data in the port
-    _ = ps2.maybe_get_data();
-
-    interrupts.set_irq_handler(.keyboard, kb_irq_handler);
-    pic.clear_mask(1);
-
     var ccb = ps2.get_controller_configuration();
     if (is_aux) {
         ccb.aux_disabled = false;
@@ -335,4 +329,11 @@ pub fn initialize(is_aux: bool) void {
         ccb.main_interrupt_enabled = true;
     }
     ps2.set_controller_configuration(ccb);
+
+    if (is_aux) ps2.send_command(.write_aux_input);
+    ps2.send_device_command(.enable_scanning);
+    if (ps2.get_reply() != .ack) log.debug("expected enable_scanning => ack", .{});
+
+    interrupts.set_irq_handler(.keyboard, kb_irq_handler, "mf2_keyboard_irq_handler");
+    pic.clear_mask(.keyboard);
 }

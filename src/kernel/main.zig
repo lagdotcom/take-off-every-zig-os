@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const acpi = @import("../common/acpi.zig");
+const ata = @import("ata.zig");
 const console = @import("console.zig");
 const cpuid = @import("cpuid.zig");
 const gdt = @import("gdt.zig");
@@ -64,12 +65,8 @@ pub fn initialize(p: BootInfo) void {
     kalloc = KernelAllocator.KernelAllocator.init(p.memory);
     allocator = kalloc.allocator();
 
+    // get something on the screen lol
     video.initialize(&p.video);
-
-    // initialize early so other modules can add their commands to it
-    shell.initialize(allocator);
-
-    gdt.initialize();
 
     console.initialize();
     console.set_foreground_colour(video.rgb(255, 255, 0));
@@ -77,8 +74,15 @@ pub fn initialize(p: BootInfo) void {
 
     console.set_foreground_colour(video.rgb(255, 255, 255));
 
+    // initialize early so other modules can add their commands to it
+    shell.initialize(allocator);
+
+    gdt.initialize();
+    interrupts.initialize();
+    ata.initialize();
+
     cpuid.initialize();
-    pci.initialize();
+    pci.initialize(allocator);
 
     var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
 
@@ -102,7 +106,6 @@ pub fn initialize(p: BootInfo) void {
         }
     }
 
-    interrupts.initialize();
     keyboard.initialize(allocator);
 
     // TODO disable USB legacy support on any controllers before calling this

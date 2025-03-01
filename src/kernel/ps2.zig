@@ -152,7 +152,7 @@ pub fn set_controller_configuration(ccb: ConfigByte) void {
 
 const io_timeout_attempts = 10;
 
-fn send_command(cmd: ControllerCommand) void {
+pub fn send_command(cmd: ControllerCommand) void {
     log.debug("send_command: {s}", .{@tagName(cmd)});
 
     x86.io_wait();
@@ -164,7 +164,7 @@ fn send_command(cmd: ControllerCommand) void {
     log.warn("timeout on send_command: {s}", .{@tagName(cmd)});
 }
 
-fn send_device_command(cmd: DeviceCommand) void {
+pub fn send_device_command(cmd: DeviceCommand) void {
     log.debug("send_device_command: {s}", .{@tagName(cmd)});
 
     x86.io_wait();
@@ -214,11 +214,11 @@ pub fn maybe_get_data() ?u8 {
     return null;
 }
 
-fn get_reply() Reply {
+pub fn get_reply() Reply {
     return @enumFromInt(get_data());
 }
 
-fn command_and_response(cmd: ControllerCommand) Reply {
+fn send_command_and_response(cmd: ControllerCommand) Reply {
     send_command(cmd);
     var reply = get_reply();
     if (reply != .resend) return reply;
@@ -440,7 +440,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
                 if (maybe_get_data()) |b| main_device_id[0] = b;
                 if (maybe_get_data()) |b| main_device_id[1] = b;
 
-                send_device_command(.enable_scanning);
+                // send_device_command(.enable_scanning);
             }
         }
     }
@@ -462,12 +462,13 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
                 if (maybe_get_data()) |b| aux_device_id[0] = b;
                 if (maybe_get_data()) |b| aux_device_id[1] = b;
 
-                send_command(.write_aux_input);
-                send_device_command(.enable_scanning);
+                // send_command(.write_aux_input);
+                // send_device_command(.enable_scanning);
             }
         }
     }
 
+    // TODO make this nicer
     log.info("main device: {x}{x} ({s})", .{ main_device_id[0], main_device_id[1], identify_device(main_device_id) });
     if (main_device_id[0] == 0xab and main_device_id[1] == 0x83) mf2_keyboard.initialize(false);
 

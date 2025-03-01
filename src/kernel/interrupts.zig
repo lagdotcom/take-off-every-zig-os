@@ -35,6 +35,7 @@ pub const IRQ = enum(u8) {
     lpt2,
     floppy,
     lpt1_spurious,
+
     cmos_rtc,
     _9,
     _10,
@@ -123,12 +124,6 @@ pub const CpuState = packed struct {
     eflags: x86.EFLAGS,
     user_esp: u32,
     user_ss: u32,
-
-    pub fn debug(self: CpuState) void {
-        inline for (std.meta.fields(@This())) |f| {
-            log.debug("  ." ++ f.name ++ " = {any}", .{@as(f.type, @field(self, f.name))});
-        }
-    }
 };
 
 fn isrHandler(ctx: *CpuState) usize {
@@ -247,15 +242,17 @@ fn set_descriptor(vector: u8, handler: *const IDTHandler, flags: IDTAttributes) 
     idt[vector].isr_hi = @intCast(ptr >> 16);
     idt[vector].reserved = 0;
 
-    log.debug("#{d} => {x} ({s})", .{ vector, ptr, @tagName(flags.gate_type) });
+    log.debug("descriptor #{d} => {x} ({s})", .{ vector, ptr, @tagName(flags.gate_type) });
 }
 
-pub fn set_error_handler(err: ErrorInterrupt, handler: InterruptHandler) void {
+pub fn set_error_handler(err: ErrorInterrupt, handler: InterruptHandler, name: []const u8) void {
     interrupt_handlers[@intFromEnum(err)] = handler;
+    log.debug("{s} => {x} ({s})", .{ @tagName(err), @intFromPtr(handler), name });
 }
 
-pub fn set_irq_handler(irq: IRQ, handler: InterruptHandler) void {
+pub fn set_irq_handler(irq: IRQ, handler: InterruptHandler, name: []const u8) void {
     interrupt_handlers[@intFromEnum(irq) + IRQ_START_INDEX] = handler;
+    log.debug("{s} => {x} ({s})", .{ @tagName(irq), @intFromPtr(handler), name });
 }
 
 fn setup_idt() void {
