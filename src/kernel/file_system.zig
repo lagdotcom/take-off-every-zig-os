@@ -7,7 +7,9 @@ const fs = @import("driver/fs.zig");
 const fs_fat = @import("driver/fs/fat.zig");
 const fs_mbr = @import("driver/fs/mbr.zig");
 const shell = @import("shell.zig");
+const time = @import("time.zig");
 const tools = @import("tools.zig");
+const video = @import("video.zig");
 
 pub const FileSystem = struct {
     ptr: *anyopaque,
@@ -33,6 +35,8 @@ pub const DirectoryEntry = struct {
     name: []const u8,
     size: u64,
     type: EntryType,
+    created: ?time.DateTime,
+    modified: ?time.DateTime,
 };
 
 const FileSystemList = std.ArrayList(FileSystem);
@@ -91,12 +95,21 @@ fn shell_dir(args: []const u8) void {
     if (entries.len == 0) {
         console.printf("no entries found\n", .{});
     } else {
-        console.printf("{s}:\n", .{parts[1]});
+        var ctime_buffer: [11]u8 = undefined;
+        var mtime_buffer: [11]u8 = undefined;
+        var size_buffer: [6]u8 = undefined;
+
+        console.set_background_colour(video.rgb(64, 64, 64));
+        console.printf("SIZE    CREATED     MODIFIED    NAME\n", .{});
+        console.set_background_colour(0);
         for (entries) |e| {
+            const ctime = if (e.created) |ct| ct.format_ymd(ctime_buffer[0..11]) catch unreachable else "unknown";
+            const mtime = if (e.modified) |mt| mt.format_ymd(mtime_buffer[0..11]) catch unreachable else "unknown";
+
             if (e.type == .directory) {
-                console.printf("  {s}/\n", .{e.name});
+                console.printf("        {s} {s} {s}/\n", .{ ctime, mtime, e.name });
             } else {
-                console.printf("  {s}, {d}b\n", .{ e.name, e.size });
+                console.printf("{s:7} {s} {s} {s}\n", .{ tools.nice_size(size_buffer[0..6], e.size) catch unreachable, ctime, mtime, e.name });
             }
         }
     }

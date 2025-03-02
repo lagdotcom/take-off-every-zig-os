@@ -4,6 +4,7 @@ const log = std.log.scoped(.fat);
 const block_device = @import("../../block_device.zig");
 const fat = @import("fat.zig");
 const file_system = @import("../../file_system.zig");
+const time = @import("../../time.zig");
 const tools = @import("../../tools.zig");
 
 // this used to be important in DOS 1.0
@@ -280,7 +281,7 @@ const FAT16Volume = struct {
         _ = path;
 
         const bpb = self.bpb;
-        tools.struct_dump(BPB, log.debug, bpb);
+        // tools.struct_dump(BPB, log.debug, bpb);
 
         // const root_dir_size: usize = bpb.root_directory_entries * 32;
         // const root_dir_sectors = (root_dir_size + (bpb.bytes_per_sector - 1)) / bpb.bytes_per_sector;
@@ -306,6 +307,8 @@ const FAT16Volume = struct {
                         .name = if (lfn_pending) parse_lfn(allocator, lfn_buffer) catch unreachable else convert_8_3_name(allocator, entry.name) catch unreachable,
                         .size = entry.size,
                         .type = if (entry.attributes.directory) .directory else .file,
+                        .created = convert_time(entry.ctime_ymd, entry.ctime_hms, entry.ctime_hundredths),
+                        .modified = convert_time(entry.mtime_ymd, entry.mtime_hms, 0),
                     }) catch unreachable;
                     lfn_pending = false;
                 },
@@ -321,6 +324,21 @@ const FAT16Volume = struct {
         return list.toOwnedSlice() catch unreachable;
     }
 };
+
+fn convert_time(ymd: YearMinuteDay, hms: HourMinuteSecond, ms: u8) time.DateTime {
+    const hundredths = ms % 100;
+    const seconds = (@as(usize, hms.second) * 2) + ms / 100;
+
+    return .{
+        .year = @as(i32, ymd.year) + 1980,
+        .month = @intCast(ymd.month),
+        .day = @intCast(ymd.day),
+        .hour = @intCast(hms.hour),
+        .minute = @intCast(hms.minute),
+        .second = @intCast(seconds),
+        .millisecond = @intCast(hundredths * 10),
+    };
+}
 
 fn convert_8_3_name(allocator: std.mem.Allocator, raw_name: [11]u8) ![]u8 {
     var buffer: [12]u8 = undefined;
@@ -405,8 +423,8 @@ const DirEntryIterator = struct {
         if (self.read_lba != self.lba) {
             if (!self.dev.read(self.lba, 1, self.buffer)) return null;
 
-            log.debug("sector {d}:", .{self.lba});
-            tools.hex_dump(log.debug, self.buffer);
+            // log.debug("sector {d}:", .{self.lba});
+            // tools.hex_dump(log.debug, self.buffer);
 
             self.read_lba = self.lba;
         }

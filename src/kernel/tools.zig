@@ -48,3 +48,13 @@ pub fn split_by_space(cmd_line: []const u8) [2][]const u8 {
 
     return .{ first_word, rest_of_line };
 }
+
+const size_prefix_list = " KMGTPEZY";
+pub fn nice_size(buffer: []u8, size: u64) ![]u8 {
+    var multiple = size;
+    for (size_prefix_list) |prefix| {
+        if (multiple < 1000) return std.fmt.bufPrint(buffer, "{d:4}{c}B", .{ multiple, prefix });
+        multiple /= 1024;
+    }
+    unreachable;
+}
