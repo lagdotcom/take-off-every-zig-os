@@ -17,13 +17,13 @@ pub const FileSystem = struct {
     fs_name: []const u8,
     vtable: *const VTable,
 
-    pub fn list_directory(self: *const FileSystem, path: []const u8, allocator: std.mem.Allocator) []DirectoryEntry {
-        return self.vtable.list_directory(self.ptr, path, allocator);
+    pub fn list_directory(self: *const FileSystem, allocator: std.mem.Allocator, path: []const u8) []DirectoryEntry {
+        return self.vtable.list_directory(self.ptr, allocator, path);
     }
 };
 
 pub const VTable = struct {
-    list_directory: *const fn (ctx: *anyopaque, path: []const u8, allocator: std.mem.Allocator) []DirectoryEntry,
+    list_directory: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) []DirectoryEntry,
 };
 
 pub const EntryType = enum(u8) {
@@ -69,12 +69,12 @@ pub fn get_by_name(name: []const u8) ?FileSystem {
     return null;
 }
 
-fn shell_list(_: []const u8) void {
+fn shell_list(_: std.mem.Allocator, _: []const u8) void {
     for (file_systems.items) |sys|
         console.printf("{s} ({s})\n", .{ sys.name, sys.fs_name });
 }
 
-fn shell_dir(args: []const u8) void {
+fn shell_dir(allocator: std.mem.Allocator, args: []const u8) void {
     const parts = tools.split_by_space(args);
 
     if (parts[0].len < 1 or parts[1].len < 1) {
@@ -89,8 +89,8 @@ fn shell_dir(args: []const u8) void {
     }
     const sys = maybe_sys.?;
 
-    const entries = sys.list_directory(parts[1], file_systems.allocator);
-    defer file_systems.allocator.free(entries);
+    const entries = sys.list_directory(allocator, parts[1]);
+    defer allocator.free(entries);
 
     if (entries.len == 0) {
         console.printf("no entries found\n", .{});
@@ -115,30 +115,30 @@ fn shell_dir(args: []const u8) void {
     }
 }
 
-pub fn scan() void {
-    const buffer = file_systems.allocator.alloc(u8, 512) catch unreachable;
-    defer file_systems.allocator.free(buffer);
+pub fn scan(allocator: std.mem.Allocator) void {
+    const buffer = allocator.alloc(u8, 512) catch unreachable;
+    defer allocator.free(buffer);
 
     for (block_device.block_devices.items) |*dev| {
-        if (dev.read(0, 1, buffer)) scan_for_file_systems(dev, buffer);
+        if (dev.read(0, 1, buffer)) scan_for_file_systems(allocator, dev, buffer);
     }
 }
 
-pub fn scan_for_file_systems(dev: *const block_device.BlockDevice, buffer: []const u8) void {
+pub fn scan_for_file_systems(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, buffer: []const u8) void {
     switch (fs.identify(buffer)) {
         .MBR => {
-            const partition_buffer = file_systems.allocator.alloc(u8, 512) catch unreachable;
-            defer file_systems.allocator.free(partition_buffer);
+            const partition_buffer = allocator.alloc(u8, 512) catch unreachable;
+            defer allocator.free(partition_buffer);
 
-            const partitions = fs_mbr.get_partitions(buffer, file_systems.allocator);
-            defer file_systems.allocator.free(partitions);
+            const partitions = fs_mbr.get_partitions(allocator, buffer);
+            defer allocator.free(partitions);
 
             for (partitions) |p| {
-                if (dev.read(p.lba, 1, partition_buffer)) scan_for_file_systems(dev, partition_buffer);
+                if (dev.read(p.lba, 1, partition_buffer)) scan_for_file_systems(allocator, dev, partition_buffer);
             }
         },
 
-        .FAT => fs_fat.add(dev, buffer, file_systems.allocator),
+        .FAT => fs_fat.add(allocator, dev, buffer),
 
         else => {},
     }

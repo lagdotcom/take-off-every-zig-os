@@ -56,12 +56,12 @@ pub fn get_by_name(name: []const u8) ?BlockDevice {
     return null;
 }
 
-fn list_block_devices(_: []const u8) void {
+fn list_block_devices(_: std.mem.Allocator, _: []const u8) void {
     for (block_devices.items) |dev|
         console.printf("{s}\n", .{dev.name});
 }
 
-fn identify_block_device_fs(name: []const u8) void {
+fn identify_block_device_fs(allocator: std.mem.Allocator, name: []const u8) void {
     const maybe_dev = get_by_name(name);
     if (maybe_dev == null) {
         console.printf("unknown device name: {s}\n", .{name});
@@ -69,8 +69,8 @@ fn identify_block_device_fs(name: []const u8) void {
     }
     const dev = maybe_dev.?;
 
-    const buffer = block_devices.allocator.alloc(u8, ata.sector_size) catch unreachable;
-    defer block_devices.allocator.free(buffer);
+    const buffer = allocator.alloc(u8, ata.sector_size) catch unreachable;
+    defer allocator.free(buffer);
 
     console.printf("attempting read at lba 0, {d} bytes\n", .{buffer.len});
     if (!dev.read(0, 1, buffer)) {

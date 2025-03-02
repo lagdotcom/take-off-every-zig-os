@@ -129,8 +129,6 @@ const PhysicalRegionDescriptor = struct {
     end_of_table: bool,
 };
 
-pub var allocator: std.mem.Allocator = undefined;
-
 var status = pci.DriverStatus.stopped;
 fn get_status() pci.DriverStatus {
     return status;
@@ -194,16 +192,16 @@ var bus_number: pci.PCIBus = 0;
 var device_number: pci.PCISlot = 0;
 var function_number: pci.PCIFunction = 0;
 
-pub fn attach_piix3(bus: pci.PCIBus, slot: pci.PCISlot, function: pci.PCIFunction) void {
+pub fn attach_piix3(allocator: std.mem.Allocator, device: *const pci.PCIDevice) void {
     status = .starting;
-    log.debug("PIIX3 attaching to {d}:{d}:{d}", .{ bus, slot, function });
+    log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    bus_number = bus;
-    device_number = slot;
-    function_number = function;
+    bus_number = device.bus;
+    device_number = device.slot;
+    function_number = device.function;
 
-    pci.config_read_struct(Config, bus, slot, function, &cfg);
+    pci.config_read_struct(Config, bus_number, device_number, function_number, &cfg);
 
     if (cfg.class_code[0] & 0x80 == 0x80) {
         const raw: u32 = @bitCast(cfg.bus_master_interface_base_address);
@@ -250,7 +248,7 @@ pub fn attach_piix3(bus: pci.PCIBus, slot: pci.PCISlot, function: pci.PCIFunctio
     // test_pio_transfer(false, 0);
     // test_pio_transfer(false, 1);
     // test_pio_transfer(true, 0);
-    test_pio_transfer(true, 1);
+    test_pio_transfer(allocator, true, 1);
 }
 
 fn test_bmdma_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) void {
@@ -370,7 +368,7 @@ fn get_swapped(src: []const u8, len: usize) []u8 {
     return swap_buf[0..len];
 }
 
-fn test_pio_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) void {
+fn test_pio_transfer(allocator: std.mem.Allocator, secondary_bus: bool, drive_number: ata.DriveNumber) void {
     const bus = if (secondary_bus) ata.secondary else ata.primary;
 
     bus.soft_reset();
@@ -442,8 +440,8 @@ const PIOBlockDevice = struct {
     drive_number: ata.DriveNumber,
     maximum_block_transfer: u8,
 
-    pub fn init(alloc: std.mem.Allocator, name: []const u8, bus: *const ata.Bus, drive_number: ata.DriveNumber, maximum_block_transfer: u8) !*PIOBlockDevice {
-        const self = try alloc.create(PIOBlockDevice);
+    pub fn init(allocator: std.mem.Allocator, name: []const u8, bus: *const ata.Bus, drive_number: ata.DriveNumber, maximum_block_transfer: u8) !*PIOBlockDevice {
+        const self = try allocator.create(PIOBlockDevice);
         self.name = name;
         self.is_secondary = bus.is_secondary;
         self.drive_number = drive_number;

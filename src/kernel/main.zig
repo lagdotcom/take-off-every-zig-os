@@ -86,8 +86,7 @@ pub fn initialize(p: BootInfo) void {
     file_system.init(allocator);
     cpuid.initialize();
     pci.initialize(allocator); // relies on ATA, BlockDevice
-
-    file_system.scan(); // relies on PCI
+    file_system.scan(allocator); // relies on PCI
 
     var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
 
@@ -116,7 +115,7 @@ pub fn initialize(p: BootInfo) void {
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
 
-    shell.enter();
+    shell.enter(allocator);
 
     std.debug.panic("end of kernel reached", .{});
 }

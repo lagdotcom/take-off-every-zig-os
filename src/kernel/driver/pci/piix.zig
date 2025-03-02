@@ -5,13 +5,9 @@
 // 8086:7010    PIIX3   (IDE Interface)
 // 8086:7020    PIIX3   (USB Interface)
 
-const std = @import("std");
-
 const registry = @import("../../pci.zig");
-
 const ide = @import("piix/ide.zig");
 
-pub fn initialize(allocator: std.mem.Allocator) void {
-    ide.allocator = allocator;
+pub fn initialize() void {
     registry.add_driver(ide.piix3, &ide.piix3_driver);
 }

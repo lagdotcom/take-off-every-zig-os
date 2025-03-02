@@ -218,7 +218,7 @@ fn get_fat_header(raw_sector: []const u8) FATHeader {
     return .{ .bpb = bpb, .ebpb = .{ .fat12_16 = ebpb } };
 }
 
-pub fn add(dev: *const block_device.BlockDevice, buffer: []const u8, allocator: std.mem.Allocator) void {
+pub fn add(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, buffer: []const u8) void {
     const h = get_fat_header(buffer);
 
     const root_dir_size = h.bpb.root_directory_entries * 32;
@@ -234,14 +234,12 @@ pub fn add(dev: *const block_device.BlockDevice, buffer: []const u8, allocator: 
     const cluster_count: u64 = data_sectors / h.bpb.sectors_per_cluster;
 
     if (cluster_count < 4085) {
-        // var vol = FAT12Volume.init(dev, h.bpb, h.ebpb.fat12_16, allocator) catch unreachable;
-        // file_system.add(vol.fs()) catch unreachable;
+        // TODO FAT12
     } else if (cluster_count < 65525) {
-        var vol = FAT16Volume.init(dev, h.bpb, h.ebpb.fat12_16, allocator) catch unreachable;
+        var vol = FAT16Volume.init(allocator, dev, h.bpb, h.ebpb.fat12_16) catch unreachable;
         file_system.add(vol.fs()) catch unreachable;
     } else {
-        // var vol = FAT32Volume.init(dev, h.bpb, h.ebpb.fat32, allocator) catch unreachable;
-        // file_system.add(vol.fs()) catch unreachable;
+        // TODO FAT32
     }
 }
 
@@ -251,7 +249,7 @@ const FAT16Volume = struct {
     bpb: *const BPB,
     ebpb: *const EBPB12_16,
 
-    pub fn init(dev: *const block_device.BlockDevice, original_bpb: *const BPB, original_ebpb: *const EBPB12_16, allocator: std.mem.Allocator) !*FAT16Volume {
+    pub fn init(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, original_bpb: *const BPB, original_ebpb: *const EBPB12_16) !*FAT16Volume {
         const bpb = try allocator.create(BPB);
         bpb.* = original_bpb.*;
 
@@ -275,7 +273,7 @@ const FAT16Volume = struct {
         };
     }
 
-    pub fn list_directory(ctx: *anyopaque, path: []const u8, allocator: std.mem.Allocator) []file_system.DirectoryEntry {
+    pub fn list_directory(ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) []file_system.DirectoryEntry {
         const self: *FAT16Volume = @ptrCast(@alignCast(ctx));
         var list = std.ArrayList(file_system.DirectoryEntry).init(allocator);
         _ = path;

@@ -149,7 +149,7 @@ const MBRPartition = struct {
     sector_count: usize,
 };
 
-pub fn get_partitions(header_buffer: []const u8, allocator: std.mem.Allocator) []MBRPartition {
+pub fn get_partitions(allocator: std.mem.Allocator, header_buffer: []const u8) []MBRPartition {
     const mbr: *const Sector = @alignCast(@ptrCast(header_buffer.ptr));
     var partition_list = std.ArrayList(MBRPartition).init(allocator);
 
