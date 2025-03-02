@@ -3,6 +3,7 @@ const log = std.log.scoped(.shell);
 
 const console = @import("console.zig");
 const kb = @import("keyboard.zig");
+const tools = @import("tools.zig");
 const video = @import("video.zig");
 
 const utf8_less_than = std.sort.asc([]const u8);
@@ -126,22 +127,19 @@ fn get_input(buffer: []u8) []u8 {
     }
 }
 
-fn exec_command(cmd_line: []u8, commands: []const ShellCommand) bool {
-    const si = std.mem.indexOfAny(u8, cmd_line, " \r\n\t");
-    const first_word = if (si) |i| cmd_line[0..i] else cmd_line;
-    const rest_of_line = if (si) |i| cmd_line[i + 1 ..] else cmd_line[0..0];
-
-    log.debug("exec_command: '{s}' '{s}' {d} commands", .{ first_word, rest_of_line, commands.len });
+fn exec_command(cmd_line: []const u8, commands: []const ShellCommand) bool {
+    const parts = tools.split_by_space(cmd_line);
+    log.debug("exec_command: '{s}' '{s}' {d} commands", .{ parts[0], parts[1], commands.len });
 
     for (commands) |cmd| {
-        if (std.mem.eql(u8, cmd.name, first_word)) {
-            if (cmd.sub_commands != null and rest_of_line.len > 0) {
-                const result = exec_command(rest_of_line, cmd.sub_commands.?);
+        if (std.mem.eql(u8, cmd.name, parts[0])) {
+            if (cmd.sub_commands != null and parts[1].len > 0) {
+                const result = exec_command(parts[1], cmd.sub_commands.?);
                 if (result) return result;
             }
 
             if (cmd.exec) |exec| {
-                exec(rest_of_line);
+                exec(parts[1]);
                 return true;
             }
 

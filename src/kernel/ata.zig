@@ -18,9 +18,11 @@ pub const Error = packed struct {
 
 const AddressMode = enum(u1) { chs = 0, lba };
 
+pub const DriveNumber = u1;
+
 const DriveHead = packed struct {
     lba_hi2: u4 = 0,
-    drive_number: u1,
+    drive_number: DriveNumber,
     reserved_5: u1 = 1,
     address_mode: AddressMode = .chs,
     reserved_7: u1 = 1,
@@ -318,39 +320,41 @@ pub const ATAPIMajorVersion = enum(u16) {
     ATAPI_4 = 0x1e,
 };
 
-pub const sector_size = 512;
+pub const sector_size: usize = 512;
 
-pub const ATABus = struct {
+pub const Bus = struct {
     name: []const u8,
+    is_secondary: bool,
     command: u16,
     control: u16,
 
-    pub fn init(name: []const u8, command_base: u16, control_base: u16) ATABus {
+    pub fn init(is_secondary: bool, command_base: u16, control_base: u16) Bus {
         return .{
-            .name = name,
+            .name = if (is_secondary) "secondary" else "primary",
+            .is_secondary = is_secondary,
             .command = command_base,
             .control = control_base,
         };
     }
 
-    fn write_device_control(self: *const ATABus, value: DeviceControl) void {
+    fn write_device_control(self: *const Bus, value: DeviceControl) void {
         x86.outb(self.control + control_offsets.w_device_control, @bitCast(value));
     }
 
     // reading this register clears pending interrupts
-    pub fn get_status(self: *const ATABus) Status {
+    pub fn get_status(self: *const Bus) Status {
         return @bitCast(x86.inb(self.command + command_offsets.r_status));
     }
 
-    pub fn get_alt_status(self: *const ATABus) Status {
+    pub fn get_alt_status(self: *const Bus) Status {
         return @bitCast(x86.inb(self.control + control_offsets.r_alternate_status));
     }
 
-    pub fn get_data_word(self: *const ATABus) u16 {
+    pub fn get_data_word(self: *const Bus) u16 {
         return x86.inw(self.command + command_offsets.rw_data);
     }
 
-    pub fn report_status(self: *const ATABus) void {
+    pub fn report_status(self: *const Bus) void {
         const status = self.get_alt_status();
         log.debug("status:{s}{s}{s}{s}{s}{s}{s}{s}", .{
             if (status.err) " ERR" else "",
@@ -364,16 +368,16 @@ pub const ATABus = struct {
         });
     }
 
-    pub fn wait_for_ready(self: *const ATABus) void {
+    pub fn wait_for_ready(self: *const Bus) void {
         log.debug("wait for ready", .{});
         while (self.get_alt_status().busy) {}
     }
 
-    pub fn io_wait(self: *const ATABus) void {
+    pub fn io_wait(self: *const Bus) void {
         inline for (0..8) |_| _ = self.get_alt_status();
     }
 
-    pub fn soft_reset(self: *const ATABus) void {
+    pub fn soft_reset(self: *const Bus) void {
         self.write_device_control(.{ .software_reset = true });
         x86.io_wait();
 
@@ -386,7 +390,7 @@ pub const ATABus = struct {
         x86.io_wait();
     }
 
-    pub fn detect_device_type(self: *const ATABus, drive_number: u1) DeviceType {
+    pub fn detect_device_type(self: *const Bus, drive_number: DriveNumber) DeviceType {
         self.select_device(.{ .drive_number = drive_number });
 
         const cl: u8 = x86.inb(self.command + 4);
@@ -399,7 +403,7 @@ pub const ATABus = struct {
         return .unknown;
     }
 
-    pub fn identify(self: *const ATABus, drive_number: u1, data: *DeviceIdentification) bool {
+    pub fn identify(self: *const Bus, drive_number: DriveNumber, data: *DeviceIdentification) bool {
         self.select_device(.{ .drive_number = drive_number });
         self.send_command(.identify);
 
@@ -428,7 +432,7 @@ pub const ATABus = struct {
         return true;
     }
 
-    pub fn identify_packet_device(self: *const ATABus, drive_number: u1, buffer: *[256]u16) bool {
+    pub fn identify_packet_device(self: *const Bus, drive_number: DriveNumber, buffer: *[256]u16) bool {
         self.select_device(.{ .drive_number = drive_number });
         self.send_command(.identify_packet_device);
 
@@ -444,17 +448,17 @@ pub const ATABus = struct {
         return true;
     }
 
-    fn send_command(self: *const ATABus, cmd: Command) void {
+    fn send_command(self: *const Bus, cmd: Command) void {
         log.debug("ata@{x}: {s}", .{ self.command, @tagName(cmd) });
         x86.outb(self.command + command_offsets.w_command, @intFromEnum(cmd));
     }
 
-    fn select_device(self: *const ATABus, dh: DriveHead) void {
+    fn select_device(self: *const Bus, dh: DriveHead) void {
         x86.outb(self.command + command_offsets.rw_drive_head, @bitCast(dh));
         self.io_wait();
     }
 
-    pub fn set_lba28(self: *const ATABus, lba: u28, drive_number: u1, sector_count: u8) void {
+    pub fn set_lba28(self: *const Bus, lba: u28, drive_number: DriveNumber, sector_count: u8) void {
         const addr_00_07: u8 = @intCast((lba >> 0) & 0xff);
         const addr_08_15: u8 = @intCast((lba >> 8) & 0xff);
         const addr_16_23: u8 = @intCast((lba >> 16) & 0xff);
@@ -467,7 +471,7 @@ pub const ATABus = struct {
         x86.outb(self.command + command_offsets.rw_lba_hi, addr_16_23);
     }
 
-    pub fn read_final_lba(self: *const ATABus) u28 {
+    pub fn read_final_lba(self: *const Bus) u28 {
         const dh: DriveHead = @bitCast(x86.inb(self.command + command_offsets.rw_drive_head));
         const addr_24_27 = dh.lba_hi2;
         const addr_16_23 = x86.inb(self.command + command_offsets.rw_lba_hi);
@@ -480,16 +484,16 @@ pub const ATABus = struct {
             (@as(u28, addr_00_07) << 0);
     }
 
-    pub fn dma_read(self: *const ATABus) void {
+    pub fn dma_read(self: *const Bus) void {
         x86.outb(self.command + command_offsets.w_features, 1);
         self.send_command(.read_dma);
     }
 
-    pub fn pio_read(self: *const ATABus) void {
+    pub fn pio_read(self: *const Bus) void {
         self.send_command(.read_sectors);
     }
 
-    pub fn pio_atapi_read(self: *const ATABus, lba: u32, drive_number: u1, sector_count: u32, buffer: [*]u16) bool {
+    pub fn pio_atapi_read(self: *const Bus, lba: u32, drive_number: DriveNumber, sector_count: u32, buffer: [*]u16) bool {
         const command_bytes: []const u8 = &.{
             0xa8,
             0,
@@ -560,18 +564,18 @@ pub const ATABus = struct {
 
 const PRIMARY_COMMAND_BLOCK_OFFSET = 0x1f0;
 const PRIMARY_CONTROL_BLOCK_OFFSET = 0x3f6; // spec says 3f4 but first two bytes are reserved anyway
-pub const primary = ATABus.init("primary", PRIMARY_COMMAND_BLOCK_OFFSET, PRIMARY_CONTROL_BLOCK_OFFSET);
+pub const primary = Bus.init(false, PRIMARY_COMMAND_BLOCK_OFFSET, PRIMARY_CONTROL_BLOCK_OFFSET);
 
 const SECONDARY_COMMAND_BLOCK_OFFSET = 0x170;
 const SECONDARY_CONTROL_BLOCK_OFFSET = 0x376;
-pub const secondary = ATABus.init("secondary", SECONDARY_COMMAND_BLOCK_OFFSET, SECONDARY_CONTROL_BLOCK_OFFSET);
+pub const secondary = Bus.init(true, SECONDARY_COMMAND_BLOCK_OFFSET, SECONDARY_CONTROL_BLOCK_OFFSET);
 
 fn ata_shell_command(_: []const u8) void {
     ata_shell_report_status(&primary);
     ata_shell_report_status(&secondary);
 }
 
-fn ata_shell_report_status(bus: *const ATABus) void {
+fn ata_shell_report_status(bus: *const Bus) void {
     const status = bus.get_alt_status();
     console.printf("{s:>9} ata bus @{x}/{x}:{s}{s}{s}{s}{s}{s}{s}{s}\n", .{
         bus.name,

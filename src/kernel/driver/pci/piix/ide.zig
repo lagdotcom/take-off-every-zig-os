@@ -2,6 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.PIIX_IDE);
 
 const ata = @import("../../../ata.zig");
+const block_device = @import("../../../block_device.zig");
 const common = @import("common.zig");
 const interrupts = @import("../../../interrupts.zig");
 const pci = @import("../../../pci.zig");
@@ -252,7 +253,7 @@ pub fn attach_piix3(bus: pci.PCIBus, slot: pci.PCISlot, function: pci.PCIFunctio
     test_pio_transfer(true, 1);
 }
 
-fn test_bmdma_transfer(secondary_bus: bool, drive_number: u1) void {
+fn test_bmdma_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) void {
     const bus = if (secondary_bus) ata.secondary else ata.primary;
     const irq: interrupts.IRQ = if (secondary_bus) .secondary_ata else .primary_ata;
 
@@ -328,7 +329,7 @@ fn test_bmdma_transfer(secondary_bus: bool, drive_number: u1) void {
     // inline for (std.meta.fields(Config)) |f|
     //     log.debug("  .{s} = {any}", .{ f.name, @field(cfg, f.name) });
 
-    // const primary_ata = ata.ATABus.init(PRIMARY_COMMAND_BLOCK_OFFSET, PRIMARY_CONTROL_BLOCK_OFFSET);
+    // const primary_ata = ata.Bus.init(PRIMARY_COMMAND_BLOCK_OFFSET, PRIMARY_CONTROL_BLOCK_OFFSET);
     // primary_ata.soft_reset();
     // primary_ata.report_status();
 
@@ -369,7 +370,7 @@ fn get_swapped(src: []const u8, len: usize) []u8 {
     return swap_buf[0..len];
 }
 
-fn test_pio_transfer(secondary_bus: bool, drive_number: u1) void {
+fn test_pio_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) void {
     const bus = if (secondary_bus) ata.secondary else ata.primary;
 
     bus.soft_reset();
@@ -428,29 +429,78 @@ fn test_pio_transfer(secondary_bus: bool, drive_number: u1) void {
             // TODO make this API similar to the other one?
         },
         else => {
-            bus.set_lba28(lba, drive_number, sector_count);
+            const name = std.fmt.allocPrint(allocator, "atahd{c}{d}", .{ bus.name[0], drive_number }) catch unreachable;
+            const pio = PIOBlockDevice.init(allocator, name, &bus, drive_number, identity.maximum_block_transfer) catch unreachable;
+            block_device.add(pio.device()) catch unreachable;
+        },
+    }
+}
+
+const PIOBlockDevice = struct {
+    name: []const u8,
+    is_secondary: bool,
+    drive_number: ata.DriveNumber,
+    maximum_block_transfer: u8,
+
+    pub fn init(alloc: std.mem.Allocator, name: []const u8, bus: *const ata.Bus, drive_number: ata.DriveNumber, maximum_block_transfer: u8) !*PIOBlockDevice {
+        const self = try alloc.create(PIOBlockDevice);
+        self.name = name;
+        self.is_secondary = bus.is_secondary;
+        self.drive_number = drive_number;
+        self.maximum_block_transfer = maximum_block_transfer;
+        return self;
+    }
+
+    pub fn device(self: *PIOBlockDevice) block_device.BlockDevice {
+        return .{
+            .ptr = self,
+            .name = self.name,
+            .vtable = &.{
+                .read = read,
+            },
+        };
+    }
+
+    fn read(ctx: *anyopaque, lba: u28, sector_count: u8, buffer: []u8) bool {
+        std.debug.assert(buffer.len >= sector_count * ata.sector_size);
+
+        const self: *PIOBlockDevice = @ptrCast(@alignCast(ctx));
+        const bus = if (self.is_secondary) ata.secondary else ata.primary;
+
+        const buffer_u16: [*]u16 = @alignCast(@ptrCast(buffer.ptr));
+        var buffer_index: usize = 0;
+
+        var sectors_left = sector_count;
+        var next_lba = lba;
+        while (sectors_left > 0) {
+            const sectors_to_read = @min(self.maximum_block_transfer, sectors_left);
+
+            bus.report_status();
+            bus.set_lba28(next_lba, self.drive_number, sectors_to_read);
             bus.pio_read();
 
-            for (0..sector_count) |sector_index| {
+            bus.report_status();
+            for (0..sectors_to_read) |sector_index| {
                 log.debug("waiting for RDY", .{});
                 while (!bus.get_alt_status().data_request) {}
                 bus.report_status();
 
-                const buf_u16: [*]u16 = @ptrCast(&sector_read_buffer);
-
-                for (0..ata.sector_size / 2) |i| {
+                // TODO replace this with insw
+                for (0..ata.sector_size / 2) |_| {
                     const data = bus.get_data_word();
-                    buf_u16[i] = data;
+                    buffer_u16[buffer_index] = data;
+                    buffer_index += 1;
                 }
 
-                log.debug("read {d} bytes", .{ata.sector_size});
-                bus.report_status();
-
-                log.debug("sector {d}:", .{sector_index});
-                tools.hex_dump(log.debug, sector_read_buffer[0..ata.sector_size]);
-
-                log.debug("ending lba address = {d}", .{bus.read_final_lba()});
+                log.debug("read lba {d}+{d}: {d} bytes", .{ next_lba, sector_index, ata.sector_size });
             }
-        },
+
+            sectors_left -= sectors_to_read;
+            next_lba += sectors_to_read;
+        }
+
+        bus.report_status();
+        log.debug("ending lba address = {d}", .{bus.read_final_lba()});
+        return true;
     }
-}
+};

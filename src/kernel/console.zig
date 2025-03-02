@@ -120,6 +120,11 @@ pub fn printf(comptime format: []const u8, args: anytype) void {
     std.fmt.format(printf_writer, format, args) catch unreachable;
 }
 
+pub fn printf_nl(comptime format: []const u8, args: anytype) void {
+    std.fmt.format(printf_writer, format, args) catch unreachable;
+    new_line();
+}
+
 fn scroll_down() void {
     const row_size = video.vga.pixels_per_scan_line * current_font.char_height;
     const stop_copying_at = video.vga.pixels_per_scan_line * (video.vga.vertical - current_font.char_height);

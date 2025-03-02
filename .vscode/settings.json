@@ -1,6 +1,7 @@
 {
   "cSpell.words": [
     "anyerror",
+    "anyopaque",
     "anytype",
     "bochs",
     "bochsrc",
@@ -29,6 +30,7 @@
     "putc",
     "repe",
     "Typematic",
-    "usize"
+    "usize",
+    "vtable"
   ]
 }

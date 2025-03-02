@@ -2,8 +2,10 @@ const std = @import("std");
 
 const acpi = @import("../common/acpi.zig");
 const ata = @import("ata.zig");
+const block_device = @import("block_device.zig");
 const console = @import("console.zig");
 const cpuid = @import("cpuid.zig");
+const file_system = @import("file_system.zig");
 const gdt = @import("gdt.zig");
 const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig");
@@ -80,9 +82,12 @@ pub fn initialize(p: BootInfo) void {
     gdt.initialize();
     interrupts.initialize();
     ata.initialize();
-
+    block_device.init(allocator);
+    file_system.init(allocator);
     cpuid.initialize();
-    pci.initialize(allocator);
+    pci.initialize(allocator); // relies on ATA, BlockDevice
+
+    file_system.scan(); // relies on PCI
 
     var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
 
