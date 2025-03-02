@@ -136,13 +136,13 @@ const LFNOrdinal = packed struct {
 
 const LongFilenameDirEntry = extern struct {
     ordinal: LFNOrdinal,
-    name_1: [5]u16,
+    name_1: [5]u16 align(1),
     attributes: Attributes,
     reserved: u8,
     checksum: u8,
-    name_2: [6]u16,
+    name_2: [6]u16 align(1),
     zero: u16,
-    name_3: [2]u16,
+    name_3: [2]u16 align(1),
 };
 
 const DirEntry = union(enum) {
@@ -290,6 +290,7 @@ const FAT16Volume = struct {
         defer allocator.free(buffer);
 
         const lfn_buffer = allocator.alloc(u16, MAX_LFN_SIZE) catch unreachable;
+        var lfn_pending = false;
         defer allocator.free(lfn_buffer);
 
         const lfn_final_buffer = allocator.alloc(u8, MAX_LFN_SIZE * 4) catch unreachable;
@@ -302,14 +303,17 @@ const FAT16Volume = struct {
                     if (e.normal.attributes.volume_id) continue;
 
                     list.append(.{
-                        .name = convert_8_3_name(allocator, entry.name) catch unreachable,
+                        .name = if (lfn_pending) parse_lfn(allocator, lfn_buffer) catch unreachable else convert_8_3_name(allocator, entry.name) catch unreachable,
                         .size = entry.size,
                         .type = if (entry.attributes.directory) .directory else .file,
                     }) catch unreachable;
+                    lfn_pending = false;
                 },
 
-                .long => {
-                    // TODO
+                .long => |entry| {
+                    var index: usize = (entry.ordinal.ordinal - 1) * LFN_WORDS_PER_ENTRY;
+                    append_lfn(lfn_buffer, &index, entry);
+                    lfn_pending = true;
                 },
             }
         }
@@ -345,14 +349,29 @@ fn append_lfn(lfn_buffer: []u16, index: *usize, entry: *const LongFilenameDirEnt
     if (append_lfn_part(lfn_buffer, index, entry.name_3[0..2])) return;
 }
 
-fn append_lfn_part(lfn_buffer: []u16, index: *usize, words: []const u16) bool {
+fn append_lfn_part(lfn_buffer: []u16, index: *usize, words: []align(1) const u16) bool {
     for (words) |w| {
-        if (w == 0 or w == 0xffff) return true;
         lfn_buffer[index.*] = w;
         index.* += 1;
+        if (w == 0 or w == 0xffff) return true;
     }
 
     return false;
+}
+
+fn parse_lfn(allocator: std.mem.Allocator, buffer: []const u16) ![]u8 {
+    var len = buffer.len;
+    for (buffer, 0..) |w, i| {
+        if (w == 0) {
+            len = i;
+            break;
+        }
+    }
+
+    // const buf_ptr8: [*]const u8 = @ptrCast(buffer);
+    // tools.hex_dump(log.debug, buf_ptr8[0 .. len * 2]);
+
+    return std.unicode.utf16LeToUtf8Alloc(allocator, buffer[0..len]);
 }
 
 const DirEntryIterator = struct {
