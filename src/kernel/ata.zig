@@ -570,7 +570,7 @@ const SECONDARY_COMMAND_BLOCK_OFFSET = 0x170;
 const SECONDARY_CONTROL_BLOCK_OFFSET = 0x376;
 pub const secondary = Bus.init(true, SECONDARY_COMMAND_BLOCK_OFFSET, SECONDARY_CONTROL_BLOCK_OFFSET);
 
-fn ata_shell_command(_: std.mem.Allocator, _: []const u8) void {
+fn shell_ata(_: std.mem.Allocator, _: []const u8) !void {
     ata_shell_report_status(&primary);
     ata_shell_report_status(&secondary);
 }
@@ -592,13 +592,13 @@ fn ata_shell_report_status(bus: *const Bus) void {
     });
 }
 
-pub fn initialize() void {
+pub fn initialize() !void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    shell.add_command(.{
+    try shell.add_command(.{
         .name = "ata",
         .summary = "Get ATA device status.",
-        .exec = &ata_shell_command,
+        .exec = shell_ata,
     });
 }

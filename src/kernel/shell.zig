@@ -10,7 +10,7 @@ const utf8_less_than = std.sort.asc([]const u8);
 pub const ShellCommand = struct {
     name: []const u8,
     summary: []const u8,
-    exec: ?*const fn (allocator: std.mem.Allocator, args: []const u8) void = null,
+    exec: ?*const fn (allocator: std.mem.Allocator, args: []const u8) anyerror!void = null,
     sub_commands: ?[]const ShellCommand = null,
 
     fn less_than(_: void, lhs: ShellCommand, rhs: ShellCommand) bool {
@@ -35,7 +35,7 @@ var shell_running = false;
 
 const SHOW_SUBCOMMAND_LIMIT = 3;
 
-fn help_command(_: std.mem.Allocator, _: []const u8) void {
+fn shell_help(_: std.mem.Allocator, _: []const u8) !void {
     console.puts("known commands:\n");
     for (shell_commands.items) |cmd| {
         console.putc('\t');
@@ -56,32 +56,30 @@ fn help_command(_: std.mem.Allocator, _: []const u8) void {
     }
 }
 
-fn quit_command(_: std.mem.Allocator, _: []const u8) void {
+fn shell_quit(_: std.mem.Allocator, _: []const u8) !void {
     console.puts("exiting shell\n");
     shell_running = false;
 }
 
-pub fn initialize(allocator: std.mem.Allocator) void {
+pub fn initialize(allocator: std.mem.Allocator) !void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
     shell_commands = CommandList.init(allocator);
-    add_command(.{
+    try add_command(.{
         .name = "quit",
-        .exec = quit_command,
+        .exec = shell_quit,
         .summary = "Exit the kernel shell. This will probably crash the whole system. Enjoy!",
     });
-    add_command(.{
+    try add_command(.{
         .name = "help",
-        .exec = help_command,
+        .exec = shell_help,
         .summary = "Get the list of available commands, or get help on a given command.",
     });
 }
 
-pub fn add_command(cmd: ShellCommand) void {
-    if (cmd.exec == null and cmd.sub_commands == null) {
-        log.warn("tried to add exec-less command with no sub commands!", .{});
-    } else shell_commands.append(cmd) catch unreachable;
+pub fn add_command(cmd: ShellCommand) !void {
+    if (cmd.exec == null and cmd.sub_commands == null) return error.InvalidCommand else try shell_commands.append(cmd);
 }
 
 fn get_input(buffer: []u8) []u8 {
@@ -125,19 +123,19 @@ fn get_input(buffer: []u8) []u8 {
     }
 }
 
-fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []const ShellCommand) bool {
+fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []const ShellCommand) !bool {
     const parts = tools.split_by_space(cmd_line);
     log.debug("exec_command: '{s}' '{s}' {d} commands", .{ parts[0], parts[1], commands.len });
 
     for (commands) |cmd| {
         if (std.mem.eql(u8, cmd.name, parts[0])) {
             if (cmd.sub_commands != null and parts[1].len > 0) {
-                const result = exec_command(allocator, parts[1], cmd.sub_commands.?);
+                const result = try exec_command(allocator, parts[1], cmd.sub_commands.?);
                 if (result) return result;
             }
 
             if (cmd.exec) |exec| {
-                exec(allocator, parts[1]);
+                try exec(allocator, parts[1]);
                 return true;
             }
 
@@ -149,10 +147,10 @@ fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []
     return false;
 }
 
-pub fn enter(allocator: std.mem.Allocator) void {
+pub fn enter(allocator: std.mem.Allocator) !void {
     std.sort.insertion(ShellCommand, shell_commands.items, {}, ShellCommand.less_than);
 
-    const input_buffer = allocator.alloc(u8, 128) catch unreachable;
+    const input_buffer = try allocator.alloc(u8, 128);
     defer allocator.free(input_buffer);
 
     const prompt = video.rgb(255, 255, 0);
@@ -168,7 +166,7 @@ pub fn enter(allocator: std.mem.Allocator) void {
         const cmd_line = get_input(input_buffer);
         console.new_line();
 
-        if (!exec_command(allocator, cmd_line, shell_commands.items)) {
+        if (!try exec_command(allocator, cmd_line, shell_commands.items)) {
             console.set_foreground_colour(err_text);
             console.puts("unknown command\n");
         }

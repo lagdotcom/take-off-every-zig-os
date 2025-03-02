@@ -754,19 +754,19 @@ fn show_brief_device_info(bus: usize, slot: usize, function: usize, h: *const De
     console.printf("{d}:{d}:{d}\t{x:0>4}:{x:0>4}\t{s}\t{s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, get_vendor_name(h.vendor_id), get_device_class(h.class_code, h.subclass, h.programming_interface) });
 }
 
-const AddDeviceError = error{OutOfMemory};
+const AddDeviceError = std.mem.Allocator.Error;
 
 fn add_device(bus: PCIBus, slot: PCISlot, function: PCIFunction) AddDeviceError!*const DeviceHeader {
-    const header = pci_devices.allocator.create(DeviceHeader) catch return error.OutOfMemory;
+    const header = try pci_devices.allocator.create(DeviceHeader);
     get_device_header(header, bus, slot, function);
 
-    pci_devices.append(.{
+    try pci_devices.append(.{
         .bus = bus,
         .slot = slot,
         .function = function,
         .id = .{ .vendor_id = header.vendor_id, .device_id = header.device_id },
         .header = header,
-    }) catch return error.OutOfMemory;
+    });
 
     return header;
 }
@@ -812,7 +812,7 @@ fn brute_force_devices() AddDeviceError!void {
     }
 }
 
-fn list_pci_devices(_: std.mem.Allocator, _: []const u8) void {
+fn shell_pci_list(_: std.mem.Allocator, _: []const u8) !void {
     console.set_background_colour(video.rgb(64, 64, 64));
     console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
     console.set_background_colour(0);
@@ -843,33 +843,31 @@ pub const PCIDevice = struct {
 const PCIDeviceList = std.ArrayList(PCIDevice);
 pub var pci_devices: PCIDeviceList = undefined;
 
-pub fn initialize(allocator: std.mem.Allocator) void {
+pub fn initialize(allocator: std.mem.Allocator) !void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    shell.add_command(.{
+    try shell.add_command(.{
         .name = "pci",
         .summary = "Get information on PCI devices",
-        .sub_commands = &.{
-            .{
-                .name = "list",
-                .summary = "List available PCI devices",
-                .exec = list_pci_devices,
-            },
-        },
+        .sub_commands = &.{.{
+            .name = "list",
+            .summary = "List available PCI devices",
+            .exec = shell_pci_list,
+        }},
     });
 
     pci_driver_map = PCIDriverMap.init(allocator);
-    drivers.initialize();
+    try drivers.initialize();
 
     pci_devices = PCIDeviceList.init(allocator);
-    enumerate_buses() catch unreachable;
+    try enumerate_buses();
 
     for (pci_devices.items) |*dev| start_driver(allocator, dev);
 }
 
-pub fn add_driver(id: DeviceID, driver: *const PCIDriver) void {
-    pci_driver_map.put(id, driver) catch unreachable;
+pub fn add_driver(id: DeviceID, driver: *const PCIDriver) !void {
+    try pci_driver_map.put(id, driver);
 }
 
 fn start_driver(allocator: std.mem.Allocator, device: *const PCIDevice) void {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.kernel);
 
 const acpi = @import("../common/acpi.zig");
 const ata = @import("ata.zig");
@@ -10,7 +11,7 @@ const gdt = @import("gdt.zig");
 const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig");
 const keyboard = @import("keyboard.zig");
-const log = @import("log.zig");
+const log_module = @import("log.zig");
 const pci = @import("pci.zig");
 const ps2 = @import("ps2.zig");
 const serial = @import("serial.zig");
@@ -36,7 +37,7 @@ pub fn kernel_log_fn(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    log.write(level, "(" ++ @tagName(scope) ++ "): " ++ format, args);
+    log_module.write(level, "(" ++ @tagName(scope) ++ "): " ++ format, args);
 }
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
@@ -57,12 +58,16 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
     while (true) {}
 }
 
+fn kernel_init_error(module: []const u8, err: anyerror) void {
+    log.err("while initializing {s}: {s}", .{ module, @errorName(err) });
+}
+
 pub fn initialize(p: BootInfo) void {
     boot_info = p;
 
     // initialize super early so we have logging
-    const com1 = serial.initialize(serial.COM1) catch unreachable;
-    log.initialize(com1);
+    const com1 = serial.initialize(serial.COM1) catch |e| return kernel_init_error("serial", e);
+    log_module.initialize(com1);
 
     kalloc = KernelAllocator.KernelAllocator.init(p.memory);
     allocator = kalloc.allocator();
@@ -77,20 +82,20 @@ pub fn initialize(p: BootInfo) void {
     console.set_foreground_colour(video.rgb(255, 255, 255));
 
     // initialize early so other modules can add their commands to it
-    shell.initialize(allocator);
+    shell.initialize(allocator) catch |e| return kernel_init_error("shell", e);
 
     gdt.initialize();
     interrupts.initialize();
-    ata.initialize();
-    block_device.init(allocator);
-    file_system.init(allocator);
+    ata.initialize() catch |e| return kernel_init_error("ata", e);
+    block_device.init(allocator) catch |e| return kernel_init_error("block_device", e);
+    file_system.init(allocator) catch |e| return kernel_init_error("file_system", e);
     cpuid.initialize();
-    pci.initialize(allocator); // relies on ATA, BlockDevice
-    file_system.scan(allocator); // relies on PCI
+    pci.initialize(allocator) catch |e| return kernel_init_error("pci", e); // relies on ATA, BlockDevice
+    file_system.scan(allocator) catch |e| return kernel_init_error("file_system", e); // relies on PCI
 
     var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
 
-    const tables = acpi.read_acpi_tables(allocator, p.rsdp_entries) catch unreachable;
+    const tables = acpi.read_acpi_tables(allocator, p.rsdp_entries) catch |e| return kernel_init_error("acpi", e);
     for (tables) |table| {
         switch (table) {
             .fadt => |fadt| {
@@ -110,12 +115,12 @@ pub fn initialize(p: BootInfo) void {
         }
     }
 
-    keyboard.initialize(allocator);
+    keyboard.initialize(allocator) catch |e| return kernel_init_error("keyboard", e);
 
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
 
-    shell.enter(allocator);
+    shell.enter(allocator) catch {};
 
     std.debug.panic("end of kernel reached", .{});
 }

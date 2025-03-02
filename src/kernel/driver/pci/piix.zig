@@ -8,6 +8,6 @@
 const registry = @import("../../pci.zig");
 const ide = @import("piix/ide.zig");
 
-pub fn initialize() void {
-    registry.add_driver(ide.piix3, &ide.piix3_driver);
+pub fn initialize() !void {
+    try registry.add_driver(ide.piix3, &ide.piix3_driver);
 }

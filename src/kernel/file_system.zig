@@ -17,13 +17,13 @@ pub const FileSystem = struct {
     fs_name: []const u8,
     vtable: *const VTable,
 
-    pub fn list_directory(self: *const FileSystem, allocator: std.mem.Allocator, path: []const u8) []DirectoryEntry {
+    pub fn list_directory(self: *const FileSystem, allocator: std.mem.Allocator, path: []const u8) ![]DirectoryEntry {
         return self.vtable.list_directory(self.ptr, allocator, path);
     }
 };
 
 pub const VTable = struct {
-    list_directory: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) []DirectoryEntry,
+    list_directory: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) anyerror![]DirectoryEntry,
 };
 
 pub const EntryType = enum(u8) {
@@ -41,25 +41,33 @@ pub const DirectoryEntry = struct {
 
 const FileSystemList = std.ArrayList(FileSystem);
 
-pub var file_systems: FileSystemList = undefined;
+var file_systems: FileSystemList = undefined;
 
-pub fn init(allocator: std.mem.Allocator) void {
+pub fn init(allocator: std.mem.Allocator) !void {
     file_systems = FileSystemList.init(allocator);
 
-    shell.add_command(.{ .name = "fs", .summary = "Get file system information", .sub_commands = &.{ .{
-        .name = "list",
-        .summary = "List available file systems",
-        .exec = shell_list,
-    }, .{
-        .name = "dir",
-        .summary = "Get file system listing for given path",
-        .exec = shell_dir,
-    } } });
+    try shell.add_command(.{
+        .name = "fs",
+        .summary = "Get file system information",
+        .sub_commands = &.{ .{
+            .name = "list",
+            .summary = "List available file systems",
+            .exec = shell_fs_list,
+        }, .{
+            .name = "dir",
+            .summary = "Get file system listing for given path",
+            .exec = shell_fs_dir,
+        } },
+    });
 }
 
 pub fn add(sys: FileSystem) !void {
     try file_systems.append(sys);
     log.debug("added {s}", .{sys.name});
+}
+
+pub fn get_list() []FileSystem {
+    return file_systems.items;
 }
 
 pub fn get_by_name(name: []const u8) ?FileSystem {
@@ -69,12 +77,12 @@ pub fn get_by_name(name: []const u8) ?FileSystem {
     return null;
 }
 
-fn shell_list(_: std.mem.Allocator, _: []const u8) void {
+fn shell_fs_list(_: std.mem.Allocator, _: []const u8) !void {
     for (file_systems.items) |sys|
         console.printf("{s} ({s})\n", .{ sys.name, sys.fs_name });
 }
 
-fn shell_dir(allocator: std.mem.Allocator, args: []const u8) void {
+fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
     const parts = tools.split_by_space(args);
 
     if (parts[0].len < 1 or parts[1].len < 1) {
@@ -89,7 +97,7 @@ fn shell_dir(allocator: std.mem.Allocator, args: []const u8) void {
     }
     const sys = maybe_sys.?;
 
-    const entries = sys.list_directory(allocator, parts[1]);
+    const entries = try sys.list_directory(allocator, parts[1]);
     defer allocator.free(entries);
 
     if (entries.len == 0) {
@@ -103,42 +111,42 @@ fn shell_dir(allocator: std.mem.Allocator, args: []const u8) void {
         console.printf("SIZE    CREATED     MODIFIED    NAME\n", .{});
         console.set_background_colour(0);
         for (entries) |e| {
-            const ctime = if (e.created) |ct| ct.format_ymd(ctime_buffer[0..11]) catch unreachable else "unknown";
-            const mtime = if (e.modified) |mt| mt.format_ymd(mtime_buffer[0..11]) catch unreachable else "unknown";
+            const ctime = if (e.created) |ct| try ct.format_ymd(ctime_buffer[0..11]) else "unknown";
+            const mtime = if (e.modified) |mt| try mt.format_ymd(mtime_buffer[0..11]) else "unknown";
 
             if (e.type == .directory) {
                 console.printf("        {s} {s} {s}/\n", .{ ctime, mtime, e.name });
             } else {
-                console.printf("{s:7} {s} {s} {s}\n", .{ tools.nice_size(size_buffer[0..6], e.size) catch unreachable, ctime, mtime, e.name });
+                console.printf("{s:7} {s} {s} {s}\n", .{ try tools.nice_size(size_buffer[0..6], e.size), ctime, mtime, e.name });
             }
         }
     }
 }
 
-pub fn scan(allocator: std.mem.Allocator) void {
-    const buffer = allocator.alloc(u8, 512) catch unreachable;
+pub fn scan(allocator: std.mem.Allocator) !void {
+    const buffer = try allocator.alloc(u8, 512);
     defer allocator.free(buffer);
 
-    for (block_device.block_devices.items) |*dev| {
-        if (dev.read(0, 1, buffer)) scan_for_file_systems(allocator, dev, buffer);
+    for (block_device.get_list()) |*dev| {
+        if (dev.read(0, 1, buffer)) try scan_for_file_systems(allocator, dev, buffer);
     }
 }
 
-pub fn scan_for_file_systems(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, buffer: []const u8) void {
+pub fn scan_for_file_systems(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, buffer: []const u8) !void {
     switch (fs.identify(buffer)) {
         .MBR => {
-            const partition_buffer = allocator.alloc(u8, 512) catch unreachable;
+            const partition_buffer = try allocator.alloc(u8, 512);
             defer allocator.free(partition_buffer);
 
-            const partitions = fs_mbr.get_partitions(allocator, buffer);
+            const partitions = try fs_mbr.get_partitions(allocator, buffer);
             defer allocator.free(partitions);
 
             for (partitions) |p| {
-                if (dev.read(p.lba, 1, partition_buffer)) scan_for_file_systems(allocator, dev, partition_buffer);
+                if (dev.read(p.lba, 1, partition_buffer)) try scan_for_file_systems(allocator, dev, partition_buffer);
             }
         },
 
-        .FAT => fs_fat.add(allocator, dev, buffer),
+        .FAT => try fs_fat.add(allocator, dev, buffer),
 
         else => {},
     }

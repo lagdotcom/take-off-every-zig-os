@@ -22,9 +22,7 @@ fn print_safe(utf8_buf: []u8, ucs2: []u16, con: *uefi.protocol.SimpleTextOutput,
 fn get_protocol(boot: *uefi.tables.BootServices, protocol: type) !*protocol {
     var object: *protocol = undefined;
 
-    if (boot.locateProtocol(&protocol.guid, null, @ptrCast(&object)) != .Success) {
-        return error.MissingProtocol;
-    }
+    if (boot.locateProtocol(&protocol.guid, null, @ptrCast(&object)) != .Success) return error.MissingProtocol;
 
     return object;
 }
@@ -46,7 +44,7 @@ const Printer = struct {
     }
 
     pub fn print(self: Printer, comptime fmt: []const u8, args: anytype) void {
-        _ = print_safe(self.buf_utf8, self.buf_ucs2, self.sto, fmt, args) catch unreachable;
+        _ = print_safe(self.buf_utf8, self.buf_ucs2, self.sto, fmt, args) catch return;
     }
 };
 
@@ -63,8 +61,8 @@ pub fn main() uefi.Status {
     const allocator = uefi.pool_allocator;
     const boot = uefi.system_table.boot_services.?;
 
-    const con = get_protocol(boot, uefi.protocol.SimpleTextOutput) catch unreachable;
-    const printer = Printer.init(uefi.pool_allocator, con) catch unreachable;
+    const con = get_protocol(boot, uefi.protocol.SimpleTextOutput) catch return .DeviceError;
+    const printer = Printer.init(uefi.pool_allocator, con) catch return .OutOfResources;
     printer.clear();
 
     // printer.print("console max mode: {d}\r\n", .{con.mode.max_mode});
@@ -81,15 +79,15 @@ pub fn main() uefi.Status {
     if (get_config_table(uefi.tables.ConfigurationTable.acpi_20_table_guid)) |ptr| {
         const rsdp: *acpi.RSDP_v2 = @alignCast(@ptrCast(ptr));
         printer.print("ACPI 2.0+: XSDT@{x}\r\n", .{rsdp.xsdt_address});
-        const xsdt = acpi.read_xsdt(@intCast(rsdp.xsdt_address)) catch unreachable;
+        const xsdt = acpi.read_xsdt(@intCast(rsdp.xsdt_address)) catch return .InvalidParameter;
 
         // have to do some conversion here
-        rsdp_entries = allocator.alloc(usize, xsdt.entries.len) catch unreachable;
+        rsdp_entries = allocator.alloc(usize, xsdt.entries.len) catch return .OutOfResources;
         for (xsdt.entries, 0..) |e, i| rsdp_entries[i] = @intCast(e);
     } else if (get_config_table(uefi.tables.ConfigurationTable.acpi_10_table_guid)) |ptr| {
         const rsdp: *acpi.RSDP_v1 = @alignCast(@ptrCast(ptr));
         printer.print("ACPI 1.0: RSDT@{x}\r\n", .{rsdp.rsdt_address});
-        const rsdt = acpi.read_rsdt(@intCast(rsdp.rsdt_address)) catch unreachable;
+        const rsdt = acpi.read_rsdt(@intCast(rsdp.rsdt_address)) catch return .InvalidParameter;
         rsdp_entries = rsdt.entries;
     } else {
         _ = con.outputString(L("ACPI not supported.\r\n"));
@@ -110,7 +108,7 @@ pub fn main() uefi.Status {
         // alter the size of the memory map, so we must check the return
         // value of getMemoryMap every time.
         if (uefi.Status.Success != boot.allocatePool(uefi.tables.MemoryType.BootServicesData, map_size, &map_block)) {
-            return .BufferTooSmall;
+            return .OutOfResources;
         }
     }
 
@@ -131,7 +129,7 @@ pub fn main() uefi.Status {
     printer.print("total available: {x} bytes\r\n", .{total_available});
 
     // get the current video mode
-    const gfx = get_protocol(boot, uefi.protocol.GraphicsOutput) catch unreachable;
+    const gfx = get_protocol(boot, uefi.protocol.GraphicsOutput) catch return .DeviceError;
     const video = kernel.VideoInfo{
         .framebuffer_addr = gfx.mode.frame_buffer_base,
         .framebuffer_size = gfx.mode.frame_buffer_size,
@@ -145,13 +143,12 @@ pub fn main() uefi.Status {
     printer.print("framebuffer: @{x}+{x}, {d}x{d}, {d} per line, format={s}\r\n", .{ video.framebuffer_addr, video.framebuffer_size, video.horizontal, video.vertical, video.pixels_per_scan_line, @tagName(gfx.mode.info.pixel_format) });
 
     // get space for our memory block list
-    const memory = allocator.alloc(kernel.MemoryBlock, mem_block_count) catch return .BufferTooSmall;
+    const memory = allocator.alloc(kernel.MemoryBlock, mem_block_count) catch return .OutOfResources;
 
     // get the latest memory map
     while (boot.getMemoryMap(&map_size, @ptrCast(map_block), &map_key, &descriptor_size, &descriptor_version) != .Success) {
-        if (uefi.Status.Success != boot.allocatePool(uefi.tables.MemoryType.BootServicesData, map_size, &map_block)) {
-            return .BufferTooSmall;
-        }
+        if (uefi.Status.Success != boot.allocatePool(uefi.tables.MemoryType.BootServicesData, map_size, &map_block))
+            return .OutOfResources;
     }
 
     // fill in the memory block list

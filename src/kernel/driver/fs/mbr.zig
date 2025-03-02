@@ -99,7 +99,7 @@ pub fn is_valid(raw_sector: []const u8) bool {
     return false;
 }
 
-pub fn show_info(logger: tools.log_function, header_buffer: []const u8, maybe_allocator: ?std.mem.Allocator, maybe_dev: ?block_device.BlockDevice) void {
+pub fn show_info(logger: tools.log_function, header_buffer: []const u8, maybe_allocator: ?std.mem.Allocator, maybe_dev: ?block_device.BlockDevice) std.mem.Allocator.Error!void {
     const mbr: *const Sector = @alignCast(@ptrCast(header_buffer.ptr));
 
     logger("Disk ID: {x}", .{mbr.unique_disk_id});
@@ -126,7 +126,7 @@ pub fn show_info(logger: tools.log_function, header_buffer: []const u8, maybe_al
     const allocator = maybe_allocator.?;
     const dev = maybe_dev.?;
 
-    const buffer = allocator.alloc(u8, 512) catch unreachable;
+    const buffer = try allocator.alloc(u8, 512);
     defer allocator.free(buffer);
 
     for (mbr.partitions, 0..) |p, i| {
@@ -139,7 +139,7 @@ pub fn show_info(logger: tools.log_function, header_buffer: []const u8, maybe_al
             const p_type = fs.identify(buffer);
             logger("partition {d}, lba {d} contains file system type: {s}", .{ i, p.lba_start, @tagName(p_type) });
 
-            fs.show_info(logger, p_type, buffer, maybe_allocator, maybe_dev);
+            try fs.show_info(logger, p_type, buffer, maybe_allocator, maybe_dev);
         }
     }
 }
@@ -149,15 +149,14 @@ const MBRPartition = struct {
     sector_count: usize,
 };
 
-pub fn get_partitions(allocator: std.mem.Allocator, header_buffer: []const u8) []MBRPartition {
+pub fn get_partitions(allocator: std.mem.Allocator, header_buffer: []const u8) ![]MBRPartition {
     const mbr: *const Sector = @alignCast(@ptrCast(header_buffer.ptr));
     var partition_list = std.ArrayList(MBRPartition).init(allocator);
 
     for (mbr.partitions) |p| {
-        if (is_valid_partition(p)) {
-            partition_list.append(.{ .lba = @intCast(p.lba_start), .sector_count = p.sector_count }) catch unreachable;
-        }
+        if (is_valid_partition(p))
+            try partition_list.append(.{ .lba = @intCast(p.lba_start), .sector_count = p.sector_count });
     }
 
-    return partition_list.toOwnedSlice() catch unreachable;
+    return try partition_list.toOwnedSlice();
 }

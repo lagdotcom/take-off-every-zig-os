@@ -218,7 +218,7 @@ fn get_fat_header(raw_sector: []const u8) FATHeader {
     return .{ .bpb = bpb, .ebpb = .{ .fat12_16 = ebpb } };
 }
 
-pub fn add(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, buffer: []const u8) void {
+pub fn add(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, buffer: []const u8) !void {
     const h = get_fat_header(buffer);
 
     const root_dir_size = h.bpb.root_directory_entries * 32;
@@ -236,8 +236,8 @@ pub fn add(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, b
     if (cluster_count < 4085) {
         // TODO FAT12
     } else if (cluster_count < 65525) {
-        var vol = FAT16Volume.init(allocator, dev, h.bpb, h.ebpb.fat12_16) catch unreachable;
-        file_system.add(vol.fs()) catch unreachable;
+        var vol = try FAT16Volume.init(allocator, dev, h.bpb, h.ebpb.fat12_16);
+        try file_system.add(vol.fs());
     } else {
         // TODO FAT32
     }
@@ -273,7 +273,7 @@ const FAT16Volume = struct {
         };
     }
 
-    pub fn list_directory(ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) []file_system.DirectoryEntry {
+    pub fn list_directory(ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) ![]file_system.DirectoryEntry {
         const self: *FAT16Volume = @ptrCast(@alignCast(ctx));
         var list = std.ArrayList(file_system.DirectoryEntry).init(allocator);
         _ = path;
@@ -285,14 +285,14 @@ const FAT16Volume = struct {
         // const root_dir_sectors = (root_dir_size + (bpb.bytes_per_sector - 1)) / bpb.bytes_per_sector;
         const first_root_dir_sector: u28 = @intCast(bpb.hidden_sectors + bpb.reserved_sectors + (bpb.fat_count * bpb.sectors_per_fat));
 
-        const buffer = allocator.alloc(u8, bpb.bytes_per_sector) catch unreachable;
+        const buffer = try allocator.alloc(u8, bpb.bytes_per_sector);
         defer allocator.free(buffer);
 
-        const lfn_buffer = allocator.alloc(u16, MAX_LFN_SIZE) catch unreachable;
+        const lfn_buffer = try allocator.alloc(u16, MAX_LFN_SIZE);
         var lfn_pending = false;
         defer allocator.free(lfn_buffer);
 
-        const lfn_final_buffer = allocator.alloc(u8, MAX_LFN_SIZE * 4) catch unreachable;
+        const lfn_final_buffer = try allocator.alloc(u8, MAX_LFN_SIZE * 4);
         defer allocator.free(lfn_final_buffer);
 
         var iter = DirEntryIterator.init(buffer, self.dev, first_root_dir_sector, bpb.bytes_per_sector);
@@ -301,13 +301,13 @@ const FAT16Volume = struct {
                 .normal => |entry| {
                     if (e.normal.attributes.volume_id) continue;
 
-                    list.append(.{
-                        .name = if (lfn_pending) parse_lfn(allocator, lfn_buffer) catch unreachable else convert_8_3_name(allocator, entry.name) catch unreachable,
+                    try list.append(.{
+                        .name = try if (lfn_pending) parse_lfn(allocator, lfn_buffer) else convert_8_3_name(allocator, entry.name),
                         .size = entry.size,
                         .type = if (entry.attributes.directory) .directory else .file,
                         .created = convert_time(entry.ctime_ymd, entry.ctime_hms, entry.ctime_hundredths),
                         .modified = convert_time(entry.mtime_ymd, entry.mtime_hms, 0),
-                    }) catch unreachable;
+                    });
                     lfn_pending = false;
                 },
 
@@ -319,7 +319,7 @@ const FAT16Volume = struct {
             }
         }
 
-        return list.toOwnedSlice() catch unreachable;
+        return try list.toOwnedSlice();
     }
 };
 

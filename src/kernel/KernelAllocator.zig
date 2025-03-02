@@ -243,7 +243,7 @@ test "allocation" {
     try std.testing.expect(alloc2.ptr == alloc3.ptr);
 
     const alloc_fail = a.alloc(u8, 10000);
-    try std.testing.expectError(error.OutOfMemory, alloc_fail);
+    try std.testing.expectError(std.mem.Allocator.Error.OutOfMemory, alloc_fail);
 
     a.free(alloc1);
     a.free(alloc2);

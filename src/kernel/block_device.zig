@@ -25,21 +25,22 @@ pub const VTable = struct {
 
 const BlockDeviceList = std.ArrayList(BlockDevice);
 
-pub var block_devices: BlockDeviceList = undefined;
+var block_devices: BlockDeviceList = undefined;
 
-pub fn init(allocator: std.mem.Allocator) void {
+pub fn init(allocator: std.mem.Allocator) !void {
     block_devices = BlockDeviceList.init(allocator);
-    shell.add_command(.{
+
+    try shell.add_command(.{
         .name = "block",
         .summary = "Get information on block IO devices",
         .sub_commands = &.{ .{
             .name = "list",
             .summary = "List available devices",
-            .exec = list_block_devices,
+            .exec = shell_block_list,
         }, .{
             .name = "fs",
             .summary = "Try to identify file system on drive",
-            .exec = identify_block_device_fs,
+            .exec = shell_block_fs,
         } },
     });
 }
@@ -49,6 +50,10 @@ pub fn add(device: BlockDevice) !void {
     log.debug("added {s}", .{device.name});
 }
 
+pub fn get_list() []BlockDevice {
+    return block_devices.items;
+}
+
 pub fn get_by_name(name: []const u8) ?BlockDevice {
     for (block_devices.items) |dev| {
         if (std.mem.eql(u8, name, dev.name)) return dev;
@@ -56,12 +61,12 @@ pub fn get_by_name(name: []const u8) ?BlockDevice {
     return null;
 }
 
-fn list_block_devices(_: std.mem.Allocator, _: []const u8) void {
+fn shell_block_list(_: std.mem.Allocator, _: []const u8) !void {
     for (block_devices.items) |dev|
         console.printf("{s}\n", .{dev.name});
 }
 
-fn identify_block_device_fs(allocator: std.mem.Allocator, name: []const u8) void {
+fn shell_block_fs(allocator: std.mem.Allocator, name: []const u8) !void {
     const maybe_dev = get_by_name(name);
     if (maybe_dev == null) {
         console.printf("unknown device name: {s}\n", .{name});
@@ -69,7 +74,7 @@ fn identify_block_device_fs(allocator: std.mem.Allocator, name: []const u8) void
     }
     const dev = maybe_dev.?;
 
-    const buffer = allocator.alloc(u8, ata.sector_size) catch unreachable;
+    const buffer = try allocator.alloc(u8, ata.sector_size);
     defer allocator.free(buffer);
 
     console.printf("attempting read at lba 0, {d} bytes\n", .{buffer.len});
@@ -82,5 +87,5 @@ fn identify_block_device_fs(allocator: std.mem.Allocator, name: []const u8) void
 
     const fs_type = fs.identify(buffer);
     console.printf("file system: {s}\n", .{@tagName(fs_type)});
-    fs.show_info(console.printf_nl, fs_type, buffer, block_devices.allocator, dev);
+    try fs.show_info(console.printf_nl, fs_type, buffer, block_devices.allocator, dev);
 }

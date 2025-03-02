@@ -298,12 +298,12 @@ pub fn off(key: Key) void {
     // TODO add to buffer
 }
 
-pub fn initialize(allocator: std.mem.Allocator) void {
+pub fn initialize(allocator: std.mem.Allocator) !void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    key_states = allocator.alloc(bool, @intFromEnum(Key.COUNT)) catch unreachable;
-    key_press_buffer = allocator.alloc(KeyPressEvent, BUFFER_SIZE) catch unreachable;
+    key_states = try allocator.alloc(bool, @intFromEnum(Key.COUNT));
+    key_press_buffer = try allocator.alloc(KeyPressEvent, BUFFER_SIZE);
     key_press_read_index = 0;
     key_press_write_index = 0;
 

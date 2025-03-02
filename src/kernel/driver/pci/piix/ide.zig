@@ -248,10 +248,10 @@ pub fn attach_piix3(allocator: std.mem.Allocator, device: *const pci.PCIDevice) 
     // test_pio_transfer(false, 0);
     // test_pio_transfer(false, 1);
     // test_pio_transfer(true, 0);
-    test_pio_transfer(allocator, true, 1);
+    test_pio_transfer(allocator, true, 1) catch |err| log.err("test_pio_transfer: {s}", .{@errorName(err)});
 }
 
-fn test_bmdma_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) void {
+fn test_bmdma_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) !void {
     const bus = if (secondary_bus) ata.secondary else ata.primary;
     const irq: interrupts.IRQ = if (secondary_bus) .secondary_ata else .primary_ata;
 
@@ -283,11 +283,11 @@ fn test_bmdma_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) void 
         report_bus_master_status(base, "start");
 
         // TODO The data buffers cannot cross a 64K boundary, and must be contiguous in physical memory.
-        // const buf = allocator.alignedAlloc(u8, std.mem.page_size, sector_size) catch unreachable;
+        // const buf = try allocator.alignedAlloc(u8, std.mem.page_size, sector_size);
 
         // Prepare a PRDT in system memory.
         // TODO The PRDT must be uint32_t aligned, contiguous in physical memory, and cannot cross a 64K boundary.
-        // const prd_table = allocator.alignedAlloc(PhysicalRegionDescriptor, std.mem.page_size, 1) catch unreachable;
+        // const prd_table = try allocator.alignedAlloc(PhysicalRegionDescriptor, std.mem.page_size, 1);
         prd_table[0].base = @intFromPtr(&sector_read_buffer);
         prd_table[0].size = if (sector_read_buffer.len == prd_sector_size) 0 else @intCast(sector_read_buffer.len);
         prd_table[0].end_of_table = true;
@@ -368,7 +368,7 @@ fn get_swapped(src: []const u8, len: usize) []u8 {
     return swap_buf[0..len];
 }
 
-fn test_pio_transfer(allocator: std.mem.Allocator, secondary_bus: bool, drive_number: ata.DriveNumber) void {
+fn test_pio_transfer(allocator: std.mem.Allocator, secondary_bus: bool, drive_number: ata.DriveNumber) !void {
     const bus = if (secondary_bus) ata.secondary else ata.primary;
 
     bus.soft_reset();
@@ -427,9 +427,9 @@ fn test_pio_transfer(allocator: std.mem.Allocator, secondary_bus: bool, drive_nu
             // TODO make this API similar to the other one?
         },
         else => {
-            const name = std.fmt.allocPrint(allocator, "atahd{c}{d}", .{ bus.name[0], drive_number }) catch unreachable;
-            const pio = PIOBlockDevice.init(allocator, name, &bus, drive_number, identity.maximum_block_transfer) catch unreachable;
-            block_device.add(pio.device()) catch unreachable;
+            const name = try std.fmt.allocPrint(allocator, "atahd{c}{d}", .{ bus.name[0], drive_number });
+            const pio = try PIOBlockDevice.init(allocator, name, &bus, drive_number, identity.maximum_block_transfer);
+            try block_device.add(pio.device());
         },
     }
 }
