@@ -1,84 +1,5 @@
 const std = @import("std");
-
-// this used to be important in DOS 1.0
-const MediaType = enum(u8) {
-    non_partitioned_removable_disk = 0xf0,
-    non_removable_disk = 0xf8,
-};
-
-const BPB = extern struct {
-    jump_instruction: [3]u8,
-    oem_identifier: [8]u8,
-    bytes_per_sector: u16 align(1),
-    sectors_per_cluster: u8,
-    reserved_sectors: u16,
-    fat_count: u8,
-    root_directory_entries: u16 align(1),
-    sector_count: u16 align(1),
-    media_descriptor_type: MediaType,
-    sectors_per_fat: u16,
-    sectors_per_track: u16,
-    head_count: u16,
-    hidden_sectors: u32,
-    large_sector_count: u32,
-
-    // Extended BPB for FAT12/16
-    drive_number: u8,
-    reserved: u8,
-    boot_signature: u8,
-    volume_id: u32 align(1),
-    volume_label: [11]u8,
-    system_identifier: [8]u8,
-    boot_code: [448]u8,
-    bootable_partition_signature: u16,
-};
-
-const Attributes = packed struct {
-    read_only: bool = false,
-    hidden: bool = false,
-    system: bool = false,
-    volume_id: bool = false,
-    directory: bool = false,
-    archive: bool = false,
-    _40: bool = false,
-    _80: bool = false,
-};
-
-const ATTR_LONG_NAME = Attributes{ .read_only = true, .hidden = true, .system = true, .volume_id = true };
-
-const HourMinuteSecond = packed struct {
-    second: u5,
-    minute: u6,
-    hour: u5,
-};
-
-const YearMinuteDay = packed struct {
-    day: u5,
-    month: u4,
-    year: u7,
-};
-
-const FAT_DELETED = 0xe5;
-const FAT_END_OF_DIRECTORY = 0;
-
-const DirEntry = extern struct {
-    name: [11]u8,
-    attributes: Attributes,
-    reserved: u8,
-    ctime_hundredths: u8,
-    ctime_hms: HourMinuteSecond,
-    ctime_ymd: YearMinuteDay,
-    atime_ymd: YearMinuteDay,
-    cluster_hi: u16,
-    mtime_hms: HourMinuteSecond,
-    mtime_ymd: YearMinuteDay,
-    cluster_lo: u16,
-    size: u32,
-};
-
-const CLUSTER_FREE = 0x0;
-const CLUSTER_BAD = 0xff7;
-const CLUSTER_END = 0xfff;
+const fat = @import("kernel/driver/fs/fat.zig");
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -86,24 +7,28 @@ pub fn main() !void {
     const allocator = arena.allocator();
     const stdout = std.io.getStdOut().writer();
 
+    // sanity checks
+    if (@sizeOf(fat.EBPB12_16) != (512 - 36)) std.debug.panic("@sizeof(EBPB12_16) = {d}, should be {d}", .{ @sizeOf(fat.EBPB12_16), 512 - 36 });
+    if (@sizeOf(fat.EBPB32) != (512 - 36)) std.debug.panic("@sizeof(EBPB32) = {d}, should be {d}", .{ @sizeOf(fat.EBPB32), 512 - 36 });
+    if (@sizeOf(fat.BPB) != 36) std.debug.panic("@sizeOf(BPB) = {d}, should be 36", .{@sizeOf(fat.BPB)});
+    if (@sizeOf(fat.NormalDirEntry) != 32) std.debug.panic("@sizeOf(NormalDirEntry) = {d}, should be 32", .{@sizeOf(fat.NormalDirEntry)});
+
     var file = try std.fs.cwd().openFile("zig-out/bin/disk.bin", .{ .mode = .read_only });
     defer file.close();
-
-    // sanity checks
-    if (@sizeOf(BPB) != 512) std.debug.panic("@sizeOf(BPB) = {d}, should be 512", .{@sizeOf(BPB)});
-    if (@sizeOf(DirEntry) != 32) std.debug.panic("@sizeOf(DirEntry) = {d}, should be 32", .{@sizeOf(DirEntry)});
 
     const raw = try file.readToEndAlloc(allocator, 0x168000);
     defer allocator.free(raw);
 
-    const bpb: *BPB = @ptrCast(@alignCast(raw));
+    const header = fat.get_fat_header(raw);
+    const bpb = header.bpb;
+    const ebpb = header.ebpb.fat12_16;
     const total_size = bytes_to_kb(@as(u32, bpb.bytes_per_sector) * bpb.sector_count);
 
-    try stdout.print("OEM=\"{s}\" volume=\"{s}\" ({x:8}) sys=\"{s}\" | {d} sectors, {d}b/sector, {d}kb total\n", .{ bpb.oem_identifier, bpb.volume_label, bpb.volume_id, bpb.system_identifier, bpb.sector_count, bpb.bytes_per_sector, total_size });
+    try stdout.print("OEM=\"{s}\" volume=\"{s}\" ({x:8}) sys=\"{s}\" | {d} sectors, {d}b/sector, {d}kb total\n", .{ bpb.oem_identifier, ebpb.volume_label, ebpb.volume_id, ebpb.system_identifier, bpb.sector_count, bpb.bytes_per_sector, total_size });
 
     const total_sectors = bpb.sector_count;
     const fat_size = bpb.sectors_per_fat;
-    const root_dir_sectors = (((@as(u32, bpb.root_directory_entries) * @sizeOf(DirEntry)) + bpb.bytes_per_sector - 1) / bpb.bytes_per_sector);
+    const root_dir_sectors = (((@as(u32, bpb.root_directory_entries) * @sizeOf(fat.NormalDirEntry)) + bpb.bytes_per_sector - 1) / bpb.bytes_per_sector);
     const first_data_sector = bpb.reserved_sectors + (bpb.fat_count * fat_size) + root_dir_sectors;
     const first_fat_sector = bpb.reserved_sectors;
     const data_sectors = total_sectors - @as(u32, bpb.reserved_sectors) + (bpb.fat_count * fat_size) + root_dir_sectors;
@@ -172,7 +97,7 @@ pub fn main() !void {
         var previous_cluster = cluster;
         var elided: u32 = 0;
         var remaining_size: usize = entry.size;
-        while (cluster < CLUSTER_BAD) {
+        while (cluster < fat.fat12_cluster_types.bad) {
             // write current cluster
             const to_write = if (remaining_size > bytes_per_cluster) bytes_per_cluster else remaining_size;
             const sector_number = ((cluster - 2) * bpb.sectors_per_cluster) + first_data_sector;
@@ -190,9 +115,9 @@ pub fn main() !void {
                 if (elided > 1) try stdout.print("{d}", .{previous_cluster});
                 elided = 0;
 
-                if (cluster == CLUSTER_BAD) {
+                if (cluster == fat.fat12_cluster_types.bad) {
                     try stdout.print("BAD", .{});
-                } else if (cluster < CLUSTER_BAD) {
+                } else if (cluster < fat.fat12_cluster_types.bad) {
                     try stdout.print(" {d}", .{cluster});
                 }
             }
@@ -226,12 +151,12 @@ fn bytes_to_kb(size: u32) f32 {
     return @divExact(@as(f32, @floatFromInt(size)), 1024);
 }
 
-fn get_dir_entry(raw: []u8, offset: usize) *DirEntry {
+fn get_dir_entry(raw: []u8, offset: usize) *fat.NormalDirEntry {
     // std.log.debug("get_dir_entry @{x}", .{offset});
     return @ptrCast(@alignCast(&raw[offset]));
 }
 
-fn get_fat_entry(raw: []u8, cluster: u32, bpb: *BPB) u16 {
+fn get_fat_entry(raw: []u8, cluster: u32, bpb: *const fat.BPB) u16 {
     const first_fat_sector = bpb.reserved_sectors;
     const fat_offset: u32 = cluster + (cluster / 2);
     const fat_sector = first_fat_sector + (fat_offset / bpb.bytes_per_sector);
@@ -245,19 +170,19 @@ fn get_fat_entry(raw: []u8, cluster: u32, bpb: *BPB) u16 {
     return if (cluster & 1 == 1) table_value >> 4 else table_value & 0xfff;
 }
 
-fn read_dir(allocator: std.mem.Allocator, raw: []u8, start_offset: usize) ![]DirEntry {
-    var list = std.ArrayList(DirEntry).init(allocator);
+fn read_dir(allocator: std.mem.Allocator, raw: []u8, start_offset: usize) ![]fat.NormalDirEntry {
+    var list = std.ArrayList(fat.NormalDirEntry).init(allocator);
 
     var offset = start_offset;
     while (true) {
         const entry = get_dir_entry(raw, offset);
-        offset += @sizeOf(DirEntry);
+        offset += @sizeOf(fat.NormalDirEntry);
 
-        if (entry.name[0] == FAT_DELETED) continue;
-        if (entry.name[0] == FAT_END_OF_DIRECTORY) break;
+        if (entry.name[0] == fat.FAT_DELETED) continue;
+        if (entry.name[0] == fat.FAT_END_OF_DIRECTORY) break;
 
         // TODO
-        // if (entry.attributes == ATTR_LONG_NAME) ...
+        // if (entry.attributes == fat.ATTR_LONG_NAME) ...
 
         try list.append(entry.*);
     }

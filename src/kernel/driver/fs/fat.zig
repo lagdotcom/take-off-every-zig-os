@@ -21,7 +21,7 @@ const MediaType = enum(u8) {
     obsolete_ff,
 };
 
-const BPB = extern struct {
+pub const BPB = extern struct {
     jump_instruction: [3]u8,
     oem_identifier: [8]u8,
     bytes_per_sector: u16 align(1),
@@ -38,7 +38,7 @@ const BPB = extern struct {
     large_sector_count: u32,
 };
 
-const EBPB12_16 = extern struct {
+pub const EBPB12_16 = extern struct {
     drive_number: u8,
     reserved: u8,
     boot_signature: u8,
@@ -56,7 +56,7 @@ const ExtraFlags = packed struct {
     reserved_8: u8,
 };
 
-const EBPB32 = extern struct {
+pub const EBPB32 = extern struct {
     sectors_per_fat: u32,
     extra_flags: ExtraFlags,
     major_version: u8,
@@ -105,10 +105,10 @@ const YearMinuteDay = packed struct {
     year: u7,
 };
 
-const FAT_DELETED = 0xe5;
-const FAT_END_OF_DIRECTORY = 0;
+pub const FAT_DELETED = 0xe5;
+pub const FAT_END_OF_DIRECTORY = 0;
 
-const NormalDirEntry = extern struct {
+pub const NormalDirEntry = extern struct {
     name: [11]u8,
     attributes: Attributes,
     reserved: u8,
@@ -135,7 +135,7 @@ const LFNOrdinal = packed struct {
     reserved: u1,
 };
 
-const LongFilenameDirEntry = extern struct {
+pub const LongFilenameDirEntry = extern struct {
     ordinal: LFNOrdinal,
     name_1: [5]u16 align(1),
     attributes: Attributes,
@@ -151,10 +151,10 @@ const DirEntry = union(enum) {
     long: *LongFilenameDirEntry,
 };
 
-const fat12_cluster_types = struct {
-    const free = 0;
-    const bad = 0xff7;
-    const end = 0xfff;
+pub const fat12_cluster_types = struct {
+    pub const free = 0;
+    pub const bad = 0xff7;
+    pub const end = 0xfff;
 };
 
 pub const valid_boot_sector_signature: u16 = 0xaa55;
@@ -203,7 +203,7 @@ pub fn show_info(logger: tools.log_function, header_buffer: []const u8, maybe_al
     _ = maybe_dev;
 }
 
-fn get_fat_header(raw_sector: []const u8) FATHeader {
+pub fn get_fat_header(raw_sector: []const u8) FATHeader {
     const bpb_slice = raw_sector[0..@sizeOf(BPB)];
     const ebpb_slice = raw_sector[@sizeOf(BPB)..];
 
@@ -299,6 +299,7 @@ const FAT16Volume = struct {
         while (iter.next()) |e| {
             switch (e) {
                 .normal => |entry| {
+                    // tools.struct_dump(NormalDirEntry, log.debug, entry);
                     if (e.normal.attributes.volume_id) continue;
 
                     try list.append(.{
@@ -312,6 +313,7 @@ const FAT16Volume = struct {
                 },
 
                 .long => |entry| {
+                    // tools.struct_dump(LongFilenameDirEntry, log.debug, entry);
                     var index: usize = (entry.ordinal.ordinal - 1) * LFN_WORDS_PER_ENTRY;
                     append_lfn(lfn_buffer, &index, entry);
                     lfn_pending = true;
