@@ -35,6 +35,7 @@ pub const DirectoryEntry = struct {
     name: []const u8,
     size: u64,
     type: EntryType,
+    address: union { lba28: u28, cluster: u32 },
     created: ?time.DateTime,
     modified: ?time.DateTime,
 };
@@ -83,7 +84,7 @@ fn shell_fs_list(_: std.mem.Allocator, _: []const u8) !void {
 }
 
 fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
-    const parts = tools.split_by_space(args);
+    const parts = tools.split_by_whitespace(args);
 
     if (parts[0].len < 1 or parts[1].len < 1) {
         console.puts("syntax: fs dir <name> <path>\n");
@@ -151,3 +152,42 @@ pub fn scan_for_file_systems(allocator: std.mem.Allocator, dev: *const block_dev
         else => {},
     }
 }
+
+pub const PathIterator = struct {
+    string: []const u8,
+    index: usize,
+
+    pub fn init(string: []const u8) PathIterator {
+        return .{ .string = string, .index = 0 };
+    }
+
+    fn ch(self: *PathIterator) ?u8 {
+        if (self.eos()) return null;
+        return self.string[self.index];
+    }
+
+    fn advance(self: *PathIterator) void {
+        if (!self.eos()) self.index += 1;
+    }
+
+    fn eos(self: *PathIterator) bool {
+        return self.index >= self.string.len;
+    }
+
+    pub fn next(self: *PathIterator) ?[]const u8 {
+        // Skip leading separators
+        while (self.ch() == '/' or self.ch() == '\\') {
+            self.advance();
+            if (self.eos()) return null;
+        }
+
+        const start_index = self.index;
+
+        // Read until the next separator or end of string
+        while (self.ch() != null and self.ch() != '/' and self.ch() != '\\') {
+            self.advance();
+        }
+
+        return if (self.index > start_index) self.string[start_index..self.index] else null;
+    }
+};

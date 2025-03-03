@@ -41,12 +41,20 @@ pub fn struct_dump(comptime T: type, logger: log_function, data: *const T) void 
         logger("  {d:4} | .{s} = {any}", .{ @offsetOf(T, f.name), f.name, @field(data, f.name) });
 }
 
-pub fn split_by_space(cmd_line: []const u8) [2][]const u8 {
-    const si = std.mem.indexOfAny(u8, cmd_line, " \r\n\t");
-    const first_word = if (si) |i| cmd_line[0..i] else cmd_line;
-    const rest_of_line = if (si) |i| cmd_line[i + 1 ..] else cmd_line[0..0];
+pub fn split_by_something(value: []const u8, separators: []const u8) [2][]const u8 {
+    const si = std.mem.indexOfAny(u8, value, separators);
+    const first_word = if (si) |i| value[0..i] else value;
+    const rest_of_line = if (si) |i| value[i + 1 ..] else value[0..0];
 
     return .{ first_word, rest_of_line };
+}
+
+pub fn split_by_whitespace(value: []const u8) [2][]const u8 {
+    return split_by_something(value, " \r\n\t");
+}
+
+pub fn split_by_path(value: []const u8) [2][]const u8 {
+    return split_by_something(value, "/\\");
 }
 
 const size_prefix_list = " KMGTPEZY";

@@ -120,7 +120,7 @@ pub fn initialize(p: BootInfo) void {
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
 
-    shell.enter(allocator) catch {};
+    shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
 
     std.debug.panic("end of kernel reached", .{});
 }

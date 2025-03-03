@@ -11,6 +11,7 @@
     "comptime",
     "CPUID",
     "deinit",
+    "EBPB",
     "errdefer",
     "extern",
     "FADT",

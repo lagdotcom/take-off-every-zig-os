@@ -248,6 +248,9 @@ const FAT16Volume = struct {
     dev: *const block_device.BlockDevice,
     bpb: *const BPB,
     ebpb: *const EBPB12_16,
+    first_root_dir_sector: u28,
+    root_dir_sectors: u32,
+    first_data_sector: u28,
 
     pub fn init(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, original_bpb: *const BPB, original_ebpb: *const EBPB12_16) !*FAT16Volume {
         const bpb = try allocator.create(BPB);
@@ -256,12 +259,15 @@ const FAT16Volume = struct {
         const ebpb = try allocator.create(EBPB12_16);
         ebpb.* = original_ebpb.*;
 
-        const fat16 = try allocator.create(FAT16Volume);
-        fat16.name = "hd0"; // TODO
-        fat16.dev = dev;
-        fat16.bpb = bpb;
-        fat16.ebpb = ebpb;
-        return fat16;
+        const self = try allocator.create(FAT16Volume);
+        self.name = "hd0"; // TODO
+        self.dev = dev;
+        self.bpb = bpb;
+        self.ebpb = ebpb;
+        self.first_root_dir_sector = @intCast(bpb.hidden_sectors + bpb.reserved_sectors + (bpb.fat_count * bpb.sectors_per_fat));
+        self.root_dir_sectors = (((@as(u32, bpb.root_directory_entries) * @sizeOf(fat.NormalDirEntry)) + bpb.bytes_per_sector - 1) / bpb.bytes_per_sector);
+        self.first_data_sector = @intCast(bpb.hidden_sectors + bpb.reserved_sectors + (bpb.fat_count * bpb.sectors_per_fat) + self.root_dir_sectors);
+        return self;
     }
 
     pub fn fs(self: *FAT16Volume) file_system.FileSystem {
@@ -273,19 +279,34 @@ const FAT16Volume = struct {
         };
     }
 
-    pub fn list_directory(ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) ![]file_system.DirectoryEntry {
-        const self: *FAT16Volume = @ptrCast(@alignCast(ctx));
-        var list = std.ArrayList(file_system.DirectoryEntry).init(allocator);
-        _ = path;
+    fn resolve_path(self: *FAT16Volume, allocator: std.mem.Allocator, path: []const u8) !?u28 {
+        var lba = self.first_root_dir_sector;
 
-        const bpb = self.bpb;
-        // tools.struct_dump(BPB, log.debug, bpb);
+        var iter = file_system.PathIterator.init(path);
+        while (iter.next()) |part| {
+            if (try self.get_lba_of_path_entry(allocator, lba, part)) |next_lba| {
+                lba = next_lba;
+            } else return null;
+        }
 
-        // const root_dir_size: usize = bpb.root_directory_entries * 32;
-        // const root_dir_sectors = (root_dir_size + (bpb.bytes_per_sector - 1)) / bpb.bytes_per_sector;
-        const first_root_dir_sector: u28 = @intCast(bpb.hidden_sectors + bpb.reserved_sectors + (bpb.fat_count * bpb.sectors_per_fat));
+        return lba;
+    }
 
-        const buffer = try allocator.alloc(u8, bpb.bytes_per_sector);
+    fn get_lba_of_path_entry(self: *FAT16Volume, allocator: std.mem.Allocator, lba: u28, name: []const u8) !?u28 {
+        log.debug("get_lba_of_path_entry({d}, {s})", .{ lba, name });
+
+        const entries = try self.list_directory_by_lba(allocator, lba);
+        defer allocator.free(entries);
+
+        for (entries) |e| {
+            log.debug("check {s} vs. {s}", .{ name, e.name });
+            if (std.mem.eql(u8, name, e.name)) return self.get_sector_by_cluster(e.address.cluster);
+        }
+        return null;
+    }
+
+    fn list_directory_by_lba(self: *FAT16Volume, allocator: std.mem.Allocator, lba: u28) ![]file_system.DirectoryEntry {
+        const buffer = try allocator.alloc(u8, self.bpb.bytes_per_sector);
         defer allocator.free(buffer);
 
         const lfn_buffer = try allocator.alloc(u16, MAX_LFN_SIZE);
@@ -295,19 +316,25 @@ const FAT16Volume = struct {
         const lfn_final_buffer = try allocator.alloc(u8, MAX_LFN_SIZE * 4);
         defer allocator.free(lfn_final_buffer);
 
-        var iter = DirEntryIterator.init(buffer, self.dev, first_root_dir_sector, bpb.bytes_per_sector);
+        var list = std.ArrayList(file_system.DirectoryEntry).init(allocator);
+        var iter = DirEntryIterator.init(buffer, self.dev, lba, self.bpb.bytes_per_sector);
         while (iter.next()) |e| {
             switch (e) {
                 .normal => |entry| {
                     // tools.struct_dump(NormalDirEntry, log.debug, entry);
                     if (e.normal.attributes.volume_id) continue;
 
+                    const name = try if (lfn_pending) parse_lfn(allocator, lfn_buffer) else convert_8_3_name(allocator, entry.name);
+                    const cluster: u32 = entry.cluster_lo | (@as(u32, entry.cluster_hi) << 16);
+                    log.debug("entry: {s}, cluster={d}", .{ name, cluster });
+
                     try list.append(.{
-                        .name = try if (lfn_pending) parse_lfn(allocator, lfn_buffer) else convert_8_3_name(allocator, entry.name),
+                        .name = name,
                         .size = entry.size,
                         .type = if (entry.attributes.directory) .directory else .file,
                         .created = convert_time(entry.ctime_ymd, entry.ctime_hms, entry.ctime_hundredths),
                         .modified = convert_time(entry.mtime_ymd, entry.mtime_hms, 0),
+                        .address = .{ .cluster = cluster },
                     });
                     lfn_pending = false;
                 },
@@ -322,6 +349,15 @@ const FAT16Volume = struct {
         }
 
         return try list.toOwnedSlice();
+    }
+
+    fn get_sector_by_cluster(self: *FAT16Volume, cluster: u32) u28 {
+        return @intCast(((cluster - 2) * self.bpb.sectors_per_cluster) + self.first_data_sector);
+    }
+
+    pub fn list_directory(ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) ![]file_system.DirectoryEntry {
+        const self: *FAT16Volume = @ptrCast(@alignCast(ctx));
+        return if (try self.resolve_path(allocator, path)) |lba| try self.list_directory_by_lba(allocator, lba) else error.PathNotFound;
     }
 };
 
@@ -423,8 +459,8 @@ const DirEntryIterator = struct {
         if (self.read_lba != self.lba) {
             if (!self.dev.read(self.lba, 1, self.buffer)) return null;
 
-            // log.debug("sector {d}:", .{self.lba});
-            // tools.hex_dump(log.debug, self.buffer);
+            log.debug("sector {d}:", .{self.lba});
+            tools.hex_dump(log.debug, self.buffer);
 
             self.read_lba = self.lba;
         }

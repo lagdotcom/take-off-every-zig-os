@@ -123,28 +123,26 @@ fn get_input(buffer: []u8) []u8 {
     }
 }
 
-fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []const ShellCommand) !bool {
-    const parts = tools.split_by_space(cmd_line);
+fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []const ShellCommand) !void {
+    const parts = tools.split_by_whitespace(cmd_line);
     log.debug("exec_command: '{s}' '{s}' {d} commands", .{ parts[0], parts[1], commands.len });
 
     for (commands) |cmd| {
         if (std.mem.eql(u8, cmd.name, parts[0])) {
             if (cmd.sub_commands != null and parts[1].len > 0) {
-                const result = try exec_command(allocator, parts[1], cmd.sub_commands.?);
-                if (result) return result;
+                return try exec_command(allocator, parts[1], cmd.sub_commands.?);
             }
 
             if (cmd.exec) |exec| {
-                try exec(allocator, parts[1]);
-                return true;
+                return try exec(allocator, parts[1]);
             }
 
             // this only occurs if there are sub commands but no arguments were given
-            return false;
+            return error.NeedsSubCommand;
         }
     }
 
-    return false;
+    return error.CommandNotFound;
 }
 
 pub fn enter(allocator: std.mem.Allocator) !void {
@@ -166,9 +164,9 @@ pub fn enter(allocator: std.mem.Allocator) !void {
         const cmd_line = get_input(input_buffer);
         console.new_line();
 
-        if (!try exec_command(allocator, cmd_line, shell_commands.items)) {
+        exec_command(allocator, cmd_line, shell_commands.items) catch |e| {
             console.set_foreground_colour(err_text);
-            console.puts("unknown command\n");
-        }
+            console.printf("error: {s}\n", .{@errorName(e)});
+        };
     }
 }
