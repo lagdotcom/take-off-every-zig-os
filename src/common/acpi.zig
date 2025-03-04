@@ -52,7 +52,7 @@ pub fn read_rsdt(pointer: usize) !RSDT {
 
 pub const XSDT = struct {
     header: *DescriptionHeader,
-    entries: []u64,
+    entries: []const u64,
 };
 
 pub fn read_xsdt(pointer: usize) !XSDT {
@@ -283,7 +283,7 @@ fn read_acpi_table(ptr: usize) ACPITable {
     return .{ .unknown = header };
 }
 
-pub fn read_acpi_tables(allocator: std.mem.Allocator, pointers: []usize) ![]ACPITable {
+pub fn read_acpi_tables(allocator: std.mem.Allocator, pointers: []const usize) ![]ACPITable {
     const tables: []ACPITable = try allocator.alloc(ACPITable, pointers.len);
 
     for (pointers, 0..) |ptr, i| tables[i] = read_acpi_table(ptr);

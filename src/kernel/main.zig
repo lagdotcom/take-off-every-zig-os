@@ -19,9 +19,9 @@ const shell = @import("shell.zig");
 const video = @import("video.zig");
 
 pub const BootInfo = struct {
-    memory: []KernelAllocator.MemoryBlock,
+    memory: []const KernelAllocator.MemoryBlock,
     video: video.VideoInfo,
-    rsdp_entries: []usize,
+    rsdp_entries: []const usize,
 };
 
 pub const MemoryBlock = KernelAllocator.MemoryBlock;

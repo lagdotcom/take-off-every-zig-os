@@ -128,10 +128,10 @@ pub fn main() !void {
     }
 }
 
-fn get_dos_filename(raw_name: [11]u8, buffer: []u8) []const u8 {
+fn get_dos_filename(entry: *const fat.NormalDirEntry, buffer: []u8) []const u8 {
     var index: usize = 0;
     var has_dot = false;
-    for (raw_name, 0..) |c, i| {
+    for (entry.name, 0..) |c, i| {
         if (c == ' ') continue;
 
         if (i >= 8 and !has_dot) {
@@ -151,12 +151,12 @@ fn bytes_to_kb(size: u32) f32 {
     return @divExact(@as(f32, @floatFromInt(size)), 1024);
 }
 
-fn get_dir_entry(raw: []u8, offset: usize) *fat.NormalDirEntry {
+fn get_dir_entry(raw: []const u8, offset: usize) *const fat.NormalDirEntry {
     // std.log.debug("get_dir_entry @{x}", .{offset});
     return @ptrCast(@alignCast(&raw[offset]));
 }
 
-fn get_fat_entry(raw: []u8, cluster: u32, bpb: *const fat.BPB) u16 {
+fn get_fat_entry(raw: []const u8, cluster: u32, bpb: *const fat.BPB) u16 {
     const first_fat_sector = bpb.reserved_sectors;
     const fat_offset: u32 = cluster + (cluster / 2);
     const fat_sector = first_fat_sector + (fat_offset / bpb.bytes_per_sector);
@@ -170,7 +170,7 @@ fn get_fat_entry(raw: []u8, cluster: u32, bpb: *const fat.BPB) u16 {
     return if (cluster & 1 == 1) table_value >> 4 else table_value & 0xfff;
 }
 
-fn read_dir(allocator: std.mem.Allocator, raw: []u8, start_offset: usize) ![]fat.NormalDirEntry {
+fn read_dir(allocator: std.mem.Allocator, raw: []const u8, start_offset: usize) ![]const fat.NormalDirEntry {
     var list = std.ArrayList(fat.NormalDirEntry).init(allocator);
 
     var offset = start_offset;

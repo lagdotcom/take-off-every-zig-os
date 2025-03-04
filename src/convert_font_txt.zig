@@ -49,7 +49,7 @@ fn read_char_data(allocator: std.mem.Allocator, r: std.fs.File.Reader, w: usize,
 
 const GlyphData = struct {
     cp: u32,
-    bits: []bool,
+    bits: []const bool,
 };
 
 fn get_next_glyph(allocator: std.mem.Allocator, r: std.fs.File.Reader, w: usize, h: usize) !?GlyphData {
@@ -76,7 +76,7 @@ fn get_next_glyph(allocator: std.mem.Allocator, r: std.fs.File.Reader, w: usize,
     }
 }
 
-fn process_font_txt(allocator: std.mem.Allocator, path: []u8) !void {
+fn process_font_txt(allocator: std.mem.Allocator, path: []const u8) !void {
     // std.log.debug("reading: {s}", .{path});
     const f = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
     errdefer f.close();
