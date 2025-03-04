@@ -34,13 +34,17 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .name = "block",
         .summary = "Get information on block IO devices",
         .sub_commands = &.{ .{
+            .name = "fs",
+            .summary = "Try to identify file system on device",
+            .exec = shell_block_fs,
+        }, .{
             .name = "list",
             .summary = "List available devices",
             .exec = shell_block_list,
         }, .{
-            .name = "fs",
-            .summary = "Try to identify file system on drive",
-            .exec = shell_block_fs,
+            .name = "read",
+            .summary = "Read a block from a device",
+            .exec = shell_block_read,
         } },
     });
 }
@@ -88,4 +92,43 @@ fn shell_block_fs(allocator: std.mem.Allocator, name: []const u8) !void {
     const fs_type = fs.identify(buffer);
     console.printf("file system: {s}\n", .{@tagName(fs_type)});
     try fs.show_info(console.printf_nl, fs_type, buffer, block_devices.allocator, dev);
+}
+
+fn shell_block_read(allocator: std.mem.Allocator, args: []const u8) !void {
+    defer log.debug("shell_block_read: done", .{});
+
+    if (args.len < 3) {
+        console.printf("Syntax: block read <name> <number>\n", .{});
+        return;
+    }
+
+    const parts = tools.split_by_whitespace(args);
+    const maybe_dev = get_by_name(parts[0]);
+    if (maybe_dev == null) {
+        console.printf("unknown device name: {s}\n", .{parts[0]});
+        return;
+    }
+    const dev = maybe_dev.?;
+
+    const lba = std.fmt.parseUnsigned(u28, parts[1], 0) catch |err| switch (err) {
+        error.Overflow => {
+            console.printf("block number too high\n", .{});
+            return;
+        },
+        error.InvalidCharacter => {
+            console.printf("could not parse {s} as u28", .{parts[1]});
+            return;
+        },
+    };
+
+    const buffer = try allocator.alloc(u8, ata.sector_size);
+    defer allocator.free(buffer);
+
+    console.printf("attempting read at lba {d}, {d} bytes\n", .{ lba, buffer.len });
+    if (!dev.read(lba, 1, buffer)) {
+        console.printf("read failed\n", .{});
+        return;
+    }
+
+    tools.hex_dump(console.printf_nl, buffer);
 }
