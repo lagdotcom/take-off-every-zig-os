@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.tools);
 
 pub const log_function = fn (comptime format: []const u8, args: anytype) void;
 
@@ -6,31 +7,33 @@ var hex_dump_buffer: [48]u8 = undefined;
 var char_dump_buffer: [16]u8 = undefined;
 
 pub fn hex_dump(logger: log_function, data: []const u8) void {
+    defer log.debug("hex_dump({d} bytes) done", .{data.len});
     var i: usize = 0;
+
+    var hex_dump_stream = std.io.fixedBufferStream(hex_dump_buffer[0..hex_dump_buffer.len]);
+    var hex_dump_writer = hex_dump_stream.writer();
+    var char_dump_stream = std.io.fixedBufferStream(char_dump_buffer[0..char_dump_buffer.len]);
+    var char_dump_writer = char_dump_stream.writer();
 
     logger("            0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f", .{});
 
     while (i < data.len) {
-        var hi: usize = 0;
-        var ci: usize = 0;
-
         var j = i;
+        hex_dump_stream.reset();
+        char_dump_stream.reset();
 
         for (0..16) |_| {
             if (j >= data.len) break;
             const b = data[j];
 
-            hi += std.fmt.formatIntBuf(hex_dump_buffer[hi .. hi + 3], b, 16, .lower, .{ .fill = '0', .width = 2 });
-            hex_dump_buffer[hi] = ' ';
-            hi += 1;
-
-            char_dump_buffer[ci] = if (b >= 32 and b < 128) b else '.';
-            ci += 1;
+            std.fmt.formatInt(b, 16, .lower, .{ .fill = '0', .width = 2 }, hex_dump_writer) catch unreachable;
+            hex_dump_writer.writeByte(' ') catch unreachable;
+            char_dump_writer.writeByte(if (b >= 32 and b < 128) b else '.') catch unreachable;
 
             j += 1;
         }
 
-        logger("{x:0>8} | {s:<48}| {s}", .{ i, hex_dump_buffer[0..hi], char_dump_buffer[0..ci] });
+        logger("{x:0>8} | {s:<48}| {s}", .{ i, hex_dump_stream.getWritten(), char_dump_stream.getWritten() });
         i = j;
     }
 }
@@ -64,5 +67,6 @@ pub fn nice_size(buffer: []u8, size: u64) ![]u8 {
         if (multiple < 1000) return std.fmt.bufPrint(buffer, "{d:4}{c}B", .{ multiple, prefix });
         multiple /= 1024;
     }
-    unreachable;
+
+    return std.fmt.bufPrint(buffer, "TooBig", .{});
 }

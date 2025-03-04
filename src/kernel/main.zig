@@ -43,8 +43,6 @@ pub fn kernel_log_fn(
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     @setCold(true);
 
-    _ = error_return_trace;
-    _ = ret_addr;
     kernel_log_fn(.err, .kernel, "!panic! {s}", .{msg});
 
     console.set_foreground_colour(video.rgb(255, 255, 0));
@@ -55,6 +53,16 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
     const usage = kalloc.report();
     console.printf("\nkalloc: free={d} used={d} reserved={d}\n", .{ usage.free, usage.used, usage.reserved });
 
+    if (ret_addr) |addr| console.printf("return address: {x}\n", .{addr});
+
+    if (error_return_trace) |trace|
+        for (trace.instruction_addresses) |addr|
+            console.printf("  {x:16} ???\n", .{addr});
+
+    infinite_loop();
+}
+
+fn infinite_loop() noreturn {
     while (true) {}
 }
 

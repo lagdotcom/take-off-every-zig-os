@@ -276,6 +276,21 @@ fn identify_device(id: [2]u8) []const u8 {
     };
 }
 
+fn self_test() bool {
+    for (0..4) |i| {
+        send_command(.self_test);
+        const rep = get_data();
+        if (rep != 0x55) {
+            log.warn("self test #{d}: {x}, expected 55", .{ i, rep });
+            continue;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
 pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     // Step 2: Determine if the PS/2 Controller Exists
     if (!has_8042_controller(maybe_fadt)) {
@@ -302,14 +317,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     }
 
     // Step 6: Perform Controller Self Test
-    {
-        send_command(.self_test);
-        const rep = get_data();
-        if (rep != 0x55) {
-            log.warn("self test: {x}, expected 55", .{rep});
-            return;
-        }
-    }
+    if (!self_test()) return;
 
     // Step 7: Determine If There Are 2 Channels
     var has_aux = false;

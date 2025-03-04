@@ -427,7 +427,7 @@ fn test_pio_transfer(allocator: std.mem.Allocator, secondary_bus: bool, drive_nu
             // TODO make this API similar to the other one?
         },
         else => {
-            const name = try std.fmt.allocPrint(allocator, "atahd{c}{d}", .{ bus.name[0], drive_number });
+            const name = try std.fmt.allocPrint(allocator, "ata{c}{d}", .{ bus.name[0], drive_number });
             const pio = try PIOBlockDevice.init(allocator, name, &bus, drive_number, identity.maximum_block_transfer);
             try block_device.add(pio.device());
         },
