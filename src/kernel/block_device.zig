@@ -13,6 +13,10 @@ pub const BlockDevice = struct {
     name: []const u8,
     vtable: *const VTable,
 
+    pub fn alloc_sector_buffer(self: *const BlockDevice, allocator: std.mem.Allocator, sector_count: u8) ![]u8 {
+        return self.vtable.alloc_sector_buffer(self.ptr, allocator, sector_count);
+    }
+
     pub fn read(self: *const BlockDevice, lba: u28, sector_count: u8, buffer: []u8) bool {
         log.debug("{s}.read({d}, {d}, {x})", .{ self.name, lba, sector_count, @intFromPtr(buffer.ptr) });
         return self.vtable.read(self.ptr, lba, sector_count, buffer);
@@ -20,6 +24,7 @@ pub const BlockDevice = struct {
 };
 
 pub const VTable = struct {
+    alloc_sector_buffer: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, sector_count: u8) anyerror![]u8,
     read: *const fn (ctx: *anyopaque, lba: u28, sector_count: u8, buffer: []u8) bool,
 };
 
@@ -78,7 +83,7 @@ fn shell_block_fs(allocator: std.mem.Allocator, name: []const u8) !void {
     }
     const dev = maybe_dev.?;
 
-    const buffer = try allocator.alloc(u8, ata.sector_size);
+    const buffer = try dev.alloc_sector_buffer(allocator, 1);
     defer allocator.free(buffer);
 
     console.printf("attempting read at lba 0, {d} bytes\n", .{buffer.len});
@@ -121,7 +126,7 @@ fn shell_block_read(allocator: std.mem.Allocator, args: []const u8) !void {
         },
     };
 
-    const buffer = try allocator.alloc(u8, ata.sector_size);
+    const buffer = try dev.alloc_sector_buffer(allocator, 1);
     defer allocator.free(buffer);
 
     console.printf("attempting read at lba {d}, {d} bytes\n", .{ lba, buffer.len });

@@ -20,10 +20,15 @@ pub const FileSystem = struct {
     pub fn list_directory(self: *const FileSystem, allocator: std.mem.Allocator, path: []const u8) ![]DirectoryEntry {
         return self.vtable.list_directory(self.ptr, allocator, path);
     }
+
+    pub fn read_file(self: *const FileSystem, allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+        return self.vtable.read_file(self.ptr, allocator, path);
+    }
 };
 
 pub const VTable = struct {
     list_directory: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) anyerror![]DirectoryEntry,
+    read_file: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) anyerror![]u8,
 };
 
 pub const EntryType = enum(u8) {
@@ -58,6 +63,10 @@ pub fn init(allocator: std.mem.Allocator) !void {
             .name = "dir",
             .summary = "Get file system listing for given path",
             .exec = shell_fs_dir,
+        }, .{
+            .name = "read",
+            .summary = "Read file contents",
+            .exec = shell_fs_read,
         } },
     });
 }
@@ -86,8 +95,8 @@ fn shell_fs_list(_: std.mem.Allocator, _: []const u8) !void {
 fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
     const parts = tools.split_by_whitespace(args);
 
-    if (parts[0].len < 1 or parts[1].len < 1) {
-        console.puts("syntax: fs dir <name> <path>\n");
+    if (parts[0].len < 1) {
+        console.puts("syntax: fs dir <name> [path]\n");
         return;
     }
 
@@ -98,7 +107,7 @@ fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
     }
     const sys = maybe_sys.?;
 
-    const entries = try sys.list_directory(allocator, parts[1]);
+    const entries = try sys.list_directory(allocator, if (parts[1].len > 0) parts[1] else "/");
     defer allocator.free(entries);
 
     if (entries.len == 0) {
@@ -124,12 +133,32 @@ fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
     }
 }
 
-pub fn scan(allocator: std.mem.Allocator) !void {
-    const buffer = try allocator.alloc(u8, 512);
+fn shell_fs_read(allocator: std.mem.Allocator, args: []const u8) !void {
+    const parts = tools.split_by_whitespace(args);
+
+    if (parts[0].len < 1 or parts[1].len < 1) {
+        console.puts("syntax: fs dir <name> <path>\n");
+        return;
+    }
+
+    const maybe_sys = get_by_name(parts[0]);
+    if (maybe_sys == null) {
+        console.printf("unknown file system: {s}\n", .{parts[0]});
+        return;
+    }
+    const sys = maybe_sys.?;
+
+    const buffer = try sys.read_file(allocator, parts[1]);
     defer allocator.free(buffer);
 
+    tools.hex_dump(console.printf_nl, buffer);
+}
+
+pub fn scan(allocator: std.mem.Allocator) !void {
     for (block_device.get_list()) |*dev| {
+        const buffer = try dev.alloc_sector_buffer(allocator, 1);
         if (dev.read(0, 1, buffer)) try scan_for_file_systems(allocator, dev, buffer);
+        allocator.free(buffer);
     }
 }
 
@@ -191,3 +220,11 @@ pub const PathIterator = struct {
         return if (self.index > start_index) self.string[start_index..self.index] else null;
     }
 };
+
+pub fn is_empty_path(path: []const u8) bool {
+    var iter = PathIterator.init(path);
+    while (iter.next()) |_|
+        return false;
+
+    return true;
+}

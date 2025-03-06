@@ -126,7 +126,7 @@ pub fn show_info(logger: tools.log_function, header_buffer: []const u8, maybe_al
     const allocator = maybe_allocator.?;
     const dev = maybe_dev.?;
 
-    const buffer = try allocator.alloc(u8, 512);
+    const buffer = dev.alloc_sector_buffer(allocator, 1) catch return error.OutOfMemory;
     defer allocator.free(buffer);
 
     for (mbr.partitions, 0..) |p, i| {

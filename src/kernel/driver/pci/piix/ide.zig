@@ -453,16 +453,18 @@ const PIOBlockDevice = struct {
         return .{
             .ptr = self,
             .name = self.name,
-            .vtable = &.{
-                .read = read,
-            },
+            .vtable = &.{ .alloc_sector_buffer = alloc_sector_buffer, .read = read },
         };
+    }
+
+    fn alloc_sector_buffer(_: *anyopaque, allocator: std.mem.Allocator, sector_count: u8) ![]u8 {
+        return allocator.alignedAlloc(u8, 2, ata.sector_size * sector_count);
     }
 
     fn read(ctx: *anyopaque, lba: u28, sector_count: u8, buffer: []u8) bool {
         std.debug.assert(buffer.len >= sector_count * ata.sector_size);
 
-        const self: *PIOBlockDevice = @ptrCast(@alignCast(ctx));
+        const self: *PIOBlockDevice = @alignCast(@ptrCast(ctx));
         const bus = if (self.is_secondary) ata.secondary else ata.primary;
 
         const buffer_u16: [*]u16 = @alignCast(@ptrCast(buffer.ptr));

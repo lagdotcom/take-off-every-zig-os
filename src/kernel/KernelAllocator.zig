@@ -86,7 +86,7 @@ pub const KernelAllocator = struct {
         const status = x86.pause_interrupts();
         defer x86.resume_interrupts(status);
 
-        const self: *KernelAllocator = @ptrCast(@alignCast(ctx));
+        const self: *KernelAllocator = @alignCast(@ptrCast(ctx));
         const ptr_align = @as(usize, 1) << @as(std.mem.Allocator.Log2Align, @intCast(log2_ptr_align));
         const required_bytes = n + ptr_align - 1 + @sizeOf(Entry);
         log.debug("trying to alloc {d} bytes, align {d}: requires {d}", .{ n, ptr_align, required_bytes });
@@ -169,7 +169,7 @@ pub const KernelAllocator = struct {
         _ = log2_buf_align;
         _ = return_address;
 
-        // const self: *KernelAllocator = @ptrCast(@alignCast(ctx));
+        // const self: *KernelAllocator = @alignCast(@ptrCast(ctx));
         var entry = get_entry(buf);
 
         if (entry.free) {

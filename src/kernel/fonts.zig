@@ -22,7 +22,7 @@ pub const FONEntry = extern struct {
 };
 
 fn read_fon(raw: []const u8) console.FontData {
-    const h: *const FONHeader = @ptrCast(@alignCast(raw[0..@sizeOf(FONHeader)]));
+    const h: *const FONHeader = @alignCast(@ptrCast(raw[0..@sizeOf(FONHeader)]));
     if (!std.mem.eql(u8, &h.magic, fon_header_magic)) @compileError("font missing magic number");
 
     const entries_offset: usize = @sizeOf(FONHeader);

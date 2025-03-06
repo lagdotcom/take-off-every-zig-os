@@ -153,7 +153,7 @@ fn bytes_to_kb(size: u32) f32 {
 
 fn get_dir_entry(raw: []const u8, offset: usize) *const fat.NormalDirEntry {
     // std.log.debug("get_dir_entry @{x}", .{offset});
-    return @ptrCast(@alignCast(&raw[offset]));
+    return @alignCast(@ptrCast(&raw[offset]));
 }
 
 fn get_fat_entry(raw: []const u8, cluster: u32, bpb: *const fat.BPB) u16 {

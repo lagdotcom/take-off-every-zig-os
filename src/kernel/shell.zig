@@ -182,9 +182,11 @@ pub fn enter(allocator: std.mem.Allocator) !void {
         @memcpy(previous_input_buffer.ptr, cmd_line);
         previous_input = previous_input_buffer[0..cmd_line.len];
 
-        exec_command(allocator, cmd_line, shell_commands.items) catch |e| {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        exec_command(arena.allocator(), cmd_line, shell_commands.items) catch |e| {
             console.set_foreground_colour(err_text);
             console.printf("error: {s}\n", .{@errorName(e)});
         };
+        arena.deinit();
     }
 }
