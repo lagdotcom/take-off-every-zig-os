@@ -157,6 +157,12 @@ pub const fat12_cluster_types = struct {
     pub const end = 0xfff;
 };
 
+pub const fat16_cluster_types = struct {
+    pub const free = 0;
+    pub const bad = 0xfff7;
+    pub const end = 0xffff;
+};
+
 pub const valid_boot_sector_signature: u16 = 0xaa55;
 
 pub fn is_valid(raw_sector: []const u8) bool {
@@ -243,6 +249,96 @@ pub fn add(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, b
     }
 }
 
+const SectorIterator = struct {
+    ptr: *anyopaque,
+    next_fn: *const fn (ctx: *anyopaque) ?u28,
+
+    pub fn next(self: *const SectorIterator) ?u28 {
+        return self.next_fn(self.ptr);
+    }
+};
+
+const RootDirSectorIterator = struct {
+    sector: u28,
+    last_sector: u28,
+
+    pub fn init(sector: u28, count: u32) RootDirSectorIterator {
+        return .{ .sector = sector, .last_sector = @intCast(sector + count) };
+    }
+
+    pub fn next(ctx: *anyopaque) ?u28 {
+        const self: *RootDirSectorIterator = @ptrCast(@alignCast(ctx));
+
+        const sector = self.sector;
+        if (sector >= self.last_sector) return null;
+        self.sector += 1;
+        return sector;
+    }
+
+    pub fn iter(self: *RootDirSectorIterator) SectorIterator {
+        return .{ .ptr = self, .next_fn = next };
+    }
+};
+
+const FAT16SectorIterator = struct {
+    allocator: std.mem.Allocator,
+    dev: *const block_device.BlockDevice,
+    fat_buffer: []u8,
+    first_fat_sector: u28,
+    bytes_per_sector: u32,
+    last_sector: u28,
+    cluster: u32,
+    read_sector: u28,
+    sectors_per_cluster: u32,
+    first_data_sector: u32,
+
+    pub fn init(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, first_fat_sector: u28, bytes_per_sector: u32, sectors_per_fat: u32, cluster: u32, sectors_per_cluster: u32, first_data_sector: u32) !FAT16SectorIterator {
+        return .{
+            .allocator = allocator,
+            .fat_buffer = try allocator.alloc(u8, bytes_per_sector),
+            .dev = dev,
+            .first_fat_sector = first_fat_sector,
+            .bytes_per_sector = bytes_per_sector,
+            .last_sector = @intCast(first_fat_sector + sectors_per_fat),
+            .cluster = cluster,
+            .read_sector = 0,
+            .sectors_per_cluster = sectors_per_cluster,
+            .first_data_sector = first_data_sector,
+        };
+    }
+
+    pub fn deinit(self: *FAT16SectorIterator) void {
+        self.allocator.free(self.fat_buffer);
+    }
+
+    pub fn next(ctx: *anyopaque) ?u28 {
+        const self: *FAT16SectorIterator = @ptrCast(@alignCast(ctx));
+
+        const cluster = self.cluster;
+        if (cluster >= fat16_cluster_types.bad) return null;
+
+        const fat_offset = self.cluster * 2;
+        const this_fat_sector: u28 = @intCast(self.first_fat_sector + fat_offset / self.bytes_per_sector);
+        if (this_fat_sector >= self.last_sector) return null;
+
+        const this_fat_entry_offset = fat_offset % self.bytes_per_sector;
+
+        if (self.read_sector != this_fat_sector) {
+            if (!self.dev.read(this_fat_sector, 1, self.fat_buffer)) return null;
+            self.read_sector = this_fat_sector;
+        }
+
+        const ptr16: *u16 = @ptrCast(@alignCast(self.fat_buffer[this_fat_entry_offset .. this_fat_entry_offset + 2]));
+        self.cluster = ptr16.*;
+
+        return @intCast(((cluster - 2) * self.sectors_per_cluster) + self.first_data_sector);
+    }
+
+    pub fn iter(self: *FAT16SectorIterator) SectorIterator {
+        return .{ .ptr = self, .next_fn = next };
+    }
+};
+
 const FAT16Volume = struct {
     name: []const u8,
     dev: *const block_device.BlockDevice,
@@ -251,6 +347,7 @@ const FAT16Volume = struct {
     first_root_dir_sector: u28,
     root_dir_sectors: u32,
     first_data_sector: u28,
+    first_fat_sector: u28,
 
     pub fn init(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, original_bpb: *const BPB, original_ebpb: *const EBPB12_16) !*FAT16Volume {
         const bpb = try allocator.create(BPB);
@@ -264,9 +361,10 @@ const FAT16Volume = struct {
         self.dev = dev;
         self.bpb = bpb;
         self.ebpb = ebpb;
-        self.first_root_dir_sector = @intCast(bpb.hidden_sectors + bpb.reserved_sectors + (bpb.fat_count * bpb.sectors_per_fat));
+        self.first_fat_sector = @intCast(bpb.hidden_sectors + bpb.reserved_sectors);
+        self.first_root_dir_sector = @intCast(self.first_fat_sector + (@as(u28, bpb.fat_count) * bpb.sectors_per_fat));
         self.root_dir_sectors = (((@as(u32, bpb.root_directory_entries) * @sizeOf(fat.NormalDirEntry)) + bpb.bytes_per_sector - 1) / bpb.bytes_per_sector);
-        self.first_data_sector = @intCast(bpb.hidden_sectors + bpb.reserved_sectors + (bpb.fat_count * bpb.sectors_per_fat) + self.root_dir_sectors);
+        self.first_data_sector = @intCast(self.first_root_dir_sector + self.root_dir_sectors);
         return self;
     }
 
@@ -279,33 +377,52 @@ const FAT16Volume = struct {
         };
     }
 
-    fn resolve_path(self: *FAT16Volume, allocator: std.mem.Allocator, path: []const u8) !?u28 {
-        var lba = self.first_root_dir_sector;
-
+    fn get_cluster_by_path(self: *FAT16Volume, allocator: std.mem.Allocator, path: []const u8) !?u32 {
+        var cluster: ?u32 = null;
         var iter = file_system.PathIterator.init(path);
         while (iter.next()) |part| {
-            if (try self.get_lba_of_path_entry(allocator, lba, part)) |next_lba| {
-                lba = next_lba;
+            if (try self.get_cluster_of_path_entry(allocator, part, cluster)) |next_cluster| {
+                cluster = next_cluster;
             } else return null;
         }
 
-        return lba;
+        return cluster orelse 0;
     }
 
-    fn get_lba_of_path_entry(self: *FAT16Volume, allocator: std.mem.Allocator, lba: u28, name: []const u8) !?u28 {
-        log.debug("get_lba_of_path_entry({d}, {s})", .{ lba, name });
+    fn get_cluster_of_path_entry(self: *FAT16Volume, allocator: std.mem.Allocator, name: []const u8, dir_cluster: ?u32) !?u32 {
+        if (dir_cluster) |cluster| log.debug("get_cluster_of_path_entry({d}, {s})", .{ cluster, name }) else log.debug("get_cluster_of_path_entry(root, {s})", .{name});
 
-        const entries = try self.list_directory_by_lba(allocator, lba);
+        const entries = try if (dir_cluster) |cluster| self.list_directory_by_cluster(allocator, cluster) else self.list_root_directory(allocator);
         defer allocator.free(entries);
 
         for (entries) |e| {
             log.debug("check {s} vs. {s}", .{ name, e.name });
-            if (std.mem.eql(u8, name, e.name)) return self.get_sector_by_cluster(e.address.cluster);
+            if (std.mem.eql(u8, name, e.name)) return e.address.cluster;
         }
         return null;
     }
 
-    fn list_directory_by_lba(self: *FAT16Volume, allocator: std.mem.Allocator, lba: u28) ![]file_system.DirectoryEntry {
+    fn list_root_directory(self: *FAT16Volume, allocator: std.mem.Allocator) ![]file_system.DirectoryEntry {
+        var sectors = RootDirSectorIterator.init(self.first_root_dir_sector, self.root_dir_sectors);
+        return self.list_directory_from_iter(allocator, sectors.iter());
+    }
+
+    fn list_directory_by_cluster(self: *FAT16Volume, allocator: std.mem.Allocator, cluster: u32) ![]file_system.DirectoryEntry {
+        var sectors = try FAT16SectorIterator.init(
+            allocator,
+            self.dev,
+            self.first_fat_sector,
+            self.bpb.bytes_per_sector,
+            self.bpb.sectors_per_fat,
+            cluster,
+            self.bpb.sectors_per_cluster,
+            self.first_data_sector,
+        );
+        defer sectors.deinit();
+        return self.list_directory_from_iter(allocator, sectors.iter());
+    }
+
+    fn list_directory_from_iter(self: *FAT16Volume, allocator: std.mem.Allocator, lba_iterator: SectorIterator) ![]file_system.DirectoryEntry {
         const buffer = try allocator.alloc(u8, self.bpb.bytes_per_sector);
         defer allocator.free(buffer);
 
@@ -317,7 +434,7 @@ const FAT16Volume = struct {
         defer allocator.free(lfn_final_buffer);
 
         var list = std.ArrayList(file_system.DirectoryEntry).init(allocator);
-        var iter = DirEntryIterator.init(buffer, self.dev, lba, self.bpb.bytes_per_sector);
+        var iter = DirEntryIterator.init(buffer, self.dev, lba_iterator, self.bpb.bytes_per_sector);
         while (iter.next()) |e| {
             switch (e) {
                 .normal => |entry| {
@@ -357,7 +474,11 @@ const FAT16Volume = struct {
 
     pub fn list_directory(ctx: *anyopaque, allocator: std.mem.Allocator, path: []const u8) ![]file_system.DirectoryEntry {
         const self: *FAT16Volume = @ptrCast(@alignCast(ctx));
-        return if (try self.resolve_path(allocator, path)) |lba| try self.list_directory_by_lba(allocator, lba) else error.PathNotFound;
+
+        if (try self.get_cluster_by_path(allocator, path)) |cluster|
+            return try if (cluster > 0) self.list_directory_by_cluster(allocator, cluster) else self.list_root_directory(allocator);
+
+        return error.PathNotFound;
     }
 };
 
@@ -433,16 +554,17 @@ const DirEntryIterator = struct {
     dev: *const block_device.BlockDevice,
     lba: u28,
     read_lba: u28,
+    lba_iterator: SectorIterator,
     sector_size: usize,
     index: usize,
-    // TODO limit to root_directory_entries?
 
-    pub fn init(buffer: []u8, dev: *const block_device.BlockDevice, lba: u28, sector_size: usize) DirEntryIterator {
+    pub fn init(buffer: []u8, dev: *const block_device.BlockDevice, lba_iterator: SectorIterator, sector_size: usize) DirEntryIterator {
         return .{
             .buffer = buffer,
             .dev = dev,
-            .lba = lba,
+            .lba = lba_iterator.next().?,
             .read_lba = 0,
+            .lba_iterator = lba_iterator,
             .sector_size = sector_size,
             .index = 0,
         };
@@ -451,11 +573,14 @@ const DirEntryIterator = struct {
     pub fn next(self: *DirEntryIterator) ?DirEntry {
         // are we out of bounds?
         if (self.index >= self.sector_size) {
-            self.lba += 1;
-            self.index = 0;
+            // get next lba, if there is one
+            if (self.lba_iterator.next()) |next_lba| {
+                self.lba = next_lba;
+                self.index = 0;
+            } else return null;
         }
 
-        // read next sector if we need it
+        // read a sector if we need it
         if (self.read_lba != self.lba) {
             if (!self.dev.read(self.lba, 1, self.buffer)) return null;
 
