@@ -197,8 +197,7 @@ pub export fn interrupt_common() callconv(.Naked) void {
         \\    popa
         \\
         \\    # pop interrupt number, error value
-        \\    pop %eax
-        \\    pop %eax
+        \\    add $8,%esp
         \\
         \\    # TODO: deal with tss.esp0 somehow
         \\    # add $0x1c,%esp
