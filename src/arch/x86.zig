@@ -43,12 +43,26 @@ pub inline fn outl(port: u16, value: u32) void {
     );
 }
 
+var interrupts_enabled = false;
+
 pub inline fn cli() void {
     asm volatile ("cli");
+    interrupts_enabled = false;
 }
 
 pub inline fn sti() void {
     asm volatile ("sti");
+    interrupts_enabled = true;
+}
+
+pub inline fn pause_interrupts() bool {
+    const status = interrupts_enabled;
+    if (interrupts_enabled) cli();
+    return status;
+}
+
+pub inline fn resume_interrupts(status: bool) void {
+    if (status) sti();
 }
 
 pub inline fn io_wait() void {

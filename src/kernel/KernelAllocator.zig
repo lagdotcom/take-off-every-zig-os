@@ -1,6 +1,8 @@
 const std = @import("std");
 const log = std.log.scoped(.kalloc);
 
+const x86 = @import("../arch/x86.zig");
+
 pub const MemoryBlock = struct { addr: usize, size: usize };
 
 const entry_magic_number: u32 = 0xfeed2dad;
@@ -81,6 +83,9 @@ pub const KernelAllocator = struct {
     }
 
     pub fn alloc(ctx: *anyopaque, n: usize, log2_ptr_align: u8, return_address: usize) ?[*]u8 {
+        const status = x86.pause_interrupts();
+        defer x86.resume_interrupts(status);
+
         const self: *KernelAllocator = @ptrCast(@alignCast(ctx));
         const ptr_align = @as(usize, 1) << @as(std.mem.Allocator.Log2Align, @intCast(log2_ptr_align));
         const required_bytes = n + ptr_align - 1 + @sizeOf(Entry);
@@ -135,6 +140,9 @@ pub const KernelAllocator = struct {
         new_size: usize,
         return_address: usize,
     ) bool {
+        const status = x86.pause_interrupts();
+        defer x86.resume_interrupts(status);
+
         _ = ctx;
         _ = log2_buf_align;
         _ = return_address;
@@ -154,6 +162,9 @@ pub const KernelAllocator = struct {
         log2_buf_align: u8,
         return_address: usize,
     ) void {
+        const status = x86.pause_interrupts();
+        defer x86.resume_interrupts(status);
+
         _ = ctx;
         _ = log2_buf_align;
         _ = return_address;
