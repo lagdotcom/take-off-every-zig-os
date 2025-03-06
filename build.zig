@@ -159,6 +159,12 @@ pub fn build(b: *std.Build) void {
     });
     qemu_cmd.step.dependOn(install_step);
 
+    b.installDirectory(.{
+        .source_dir = b.path("res"),
+        .install_dir = .{ .custom = "" },
+        .install_subdir = "",
+    });
+
     switch (boot_type) {
         .uefi => {
             install_step.dependOn(&efi_artifact.step);

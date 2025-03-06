@@ -4,8 +4,8 @@ const log = std.log.scoped(.console);
 const fonts = @import("fonts.zig");
 const video = @import("video.zig");
 
-var cursor_x: usize = 0;
-var cursor_y: usize = 0;
+pub var cursor_x: usize = 0;
+pub var cursor_y: usize = 0;
 var current_font: *const FontData = undefined;
 var fg_colour: u32 = 0xffffffff;
 var bg_colour: u32 = 0;

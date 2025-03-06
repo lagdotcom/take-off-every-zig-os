@@ -1,7 +1,9 @@
 const std = @import("std");
 const log = std.log.scoped(.shell);
 
+const bmp = @import("bmp.zig");
 const console = @import("console.zig");
+const file_system = @import("file_system.zig");
 const kb = @import("keyboard.zig");
 const tools = @import("tools.zig");
 const video = @import("video.zig");
@@ -155,7 +157,26 @@ fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []
     return error.CommandNotFound;
 }
 
+fn show_cats(allocator: std.mem.Allocator) !void {
+    for (file_system.get_list()) |fs| {
+        const buf = fs.read_file(allocator, "cats.bmp") catch continue;
+        defer allocator.free(buf);
+
+        log.debug("CATS incoming: size={d}", .{buf.len});
+
+        const image = try bmp.BMP.init(buf);
+        const half: usize = @intCast(@divTrunc(image.header.width, 2));
+        try image.display(video.vga.horizontal / 2 - half, console.cursor_y);
+
+        console.cursor_y += @intCast(image.header.height);
+        console.new_line();
+        return;
+    }
+}
+
 pub fn enter(allocator: std.mem.Allocator) !void {
+    try show_cats(allocator);
+
     std.sort.insertion(ShellCommand, shell_commands.items, {}, ShellCommand.less_than);
 
     const input_buffer = try allocator.alloc(u8, 128);

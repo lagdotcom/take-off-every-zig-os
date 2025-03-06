@@ -41,7 +41,7 @@ pub fn fill(colour: u32) void {
     @memset(vga.framebuffer[0..vga.framebuffer_size], colour);
 }
 
-pub fn rgb(r: u32, g: u32, b: u32) u32 {
+pub fn rgb(r: u8, g: u8, b: u8) u32 {
     const r32: u32 = @intCast(r);
     const g32: u32 = @intCast(g);
     const b32: u32 = @intCast(b);

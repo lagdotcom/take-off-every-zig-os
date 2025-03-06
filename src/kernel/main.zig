@@ -97,7 +97,7 @@ pub fn initialize(p: BootInfo) void {
     ata.initialize() catch |e| return kernel_init_error("ata", e);
     block_device.init(allocator) catch |e| return kernel_init_error("block_device", e);
     file_system.init(allocator) catch |e| return kernel_init_error("file_system", e);
-    cpuid.initialize();
+    // cpuid.initialize(); TODO convert to shell module
     pci.initialize(allocator) catch |e| return kernel_init_error("pci", e); // relies on ATA, BlockDevice
     file_system.scan(allocator) catch |e| return kernel_init_error("file_system", e); // relies on PCI
 
@@ -107,18 +107,18 @@ pub fn initialize(p: BootInfo) void {
     for (tables) |table| {
         switch (table) {
             .fadt => |fadt| {
-                console.printf("FADT v{d}.{d} e{d} -- len {d}\n", .{ fadt.header.revision, fadt.fadt_minor_version.minor, fadt.fadt_minor_version.errata, fadt.header.length });
-                console.printf("FACS@{x} DSDT@{x} SMI@{x}\n", .{ fadt.firmware_ctrl, fadt.dsdt, fadt.smi_cmd });
-                console.printf("IA-PC: {any}\n", .{fadt.ia_pc_boot_arch});
-                console.printf("features: {any}\n", .{fadt.flags});
+                // console.printf("FADT v{d}.{d} e{d} -- len {d}\n", .{ fadt.header.revision, fadt.fadt_minor_version.minor, fadt.fadt_minor_version.errata, fadt.header.length });
+                // console.printf("FACS@{x} DSDT@{x} SMI@{x}\n", .{ fadt.firmware_ctrl, fadt.dsdt, fadt.smi_cmd });
+                // console.printf("IA-PC: {any}\n", .{fadt.ia_pc_boot_arch});
+                // console.printf("features: {any}\n", .{fadt.flags});
 
                 fadt_table = fadt;
             },
-            .unknown => |unk| {
-                console.printf("unknown table: {s} v{d}\n", .{ unk.signature, unk.revision });
+            .unknown => |_| {
+                // console.printf("unknown table: {s} v{d}\n", .{ unk.signature, unk.revision });
             },
             else => {
-                console.printf("{any}\n", .{table});
+                // console.printf("{any}\n", .{table});
             },
         }
     }
