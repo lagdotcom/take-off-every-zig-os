@@ -82,7 +82,7 @@ pub fn add_command(cmd: ShellCommand) !void {
     if (cmd.exec == null and cmd.sub_commands == null) return error.InvalidCommand else try shell_commands.append(cmd);
 }
 
-fn get_input(buffer: []u8) []u8 {
+fn get_input(buffer: []u8, previous_input: []u8) []u8 {
     var index: usize = 0;
     var print_cursor = true;
 
@@ -107,6 +107,16 @@ fn get_input(buffer: []u8) []u8 {
                 if (index > 0) {
                     console.replace_last_char(" ", false);
                     return buffer[0..index];
+                }
+            },
+            .up_arrow => {
+                if (previous_input.len > 0) {
+                    for (0..index + 1) |_| console.replace_last_char(" ", true);
+
+                    console.puts(previous_input);
+                    console.putc('_');
+                    @memcpy(buffer.ptr, previous_input);
+                    index = previous_input.len;
                 }
             },
             else => {
@@ -151,6 +161,11 @@ pub fn enter(allocator: std.mem.Allocator) !void {
     const input_buffer = try allocator.alloc(u8, 128);
     defer allocator.free(input_buffer);
 
+    const previous_input_buffer = try allocator.alloc(u8, 128);
+    defer allocator.free(previous_input_buffer);
+
+    var previous_input: []u8 = previous_input_buffer[0..0];
+
     const prompt = video.rgb(255, 255, 0);
     const text = video.rgb(255, 255, 255);
     const err_text = video.rgb(255, 192, 0);
@@ -161,8 +176,11 @@ pub fn enter(allocator: std.mem.Allocator) !void {
         console.puts("\n> ");
 
         console.set_foreground_colour(text);
-        const cmd_line = get_input(input_buffer);
+        const cmd_line = get_input(input_buffer, previous_input);
         console.new_line();
+
+        @memcpy(previous_input_buffer.ptr, cmd_line);
+        previous_input = previous_input_buffer[0..cmd_line.len];
 
         exec_command(allocator, cmd_line, shell_commands.items) catch |e| {
             console.set_foreground_colour(err_text);
