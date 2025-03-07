@@ -147,10 +147,15 @@ pub fn build(b: *std.Build) void {
     var disk_image_step = b.step("build disk image", "make FAT12 floppy disk image");
     disk_image_step.makeFn = build_disk_image;
 
+    const display_type = switch (builtin.os.tag) {
+        .macos => "cocoa",
+        else => "sdl",
+    };
+
     const qemu_cmd = b.addSystemCommand(&.{
         qemu_system_cmd,
         "-display",
-        "gtk,zoom-to-fit=on",
+        display_type ++ ",zoom-to-fit=on",
         "-d",
         "cpu_reset,unimp,guest_errors,trace:ps2*",
         "-D",
