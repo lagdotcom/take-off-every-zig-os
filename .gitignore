@@ -2,6 +2,7 @@
 zig-cache
 zig-out
 
+.DS_Store
 *.log
 bios*.bin
 src/fonts/*.fon
