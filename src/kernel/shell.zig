@@ -175,7 +175,9 @@ fn show_cats(allocator: std.mem.Allocator) !void {
 }
 
 pub fn enter(allocator: std.mem.Allocator) !void {
-    try show_cats(allocator);
+    show_cats(allocator) catch |err| {
+        console.printf("failed to show CATS: {s}\n", .{@errorName(err)});
+    };
 
     std.sort.insertion(ShellCommand, shell_commands.items, {}, ShellCommand.less_than);
 
