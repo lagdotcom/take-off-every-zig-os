@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const console = @import("console.zig");
+const shell = @import("shell.zig");
 
 pub const fon_header_magic = "TOEZFONm";
 
@@ -21,7 +22,10 @@ pub const FONEntry = extern struct {
     }
 };
 
-fn read_fon(raw: []const u8) console.FontData {
+fn read_fon(comptime font_name: []const u8) console.FontData {
+    const file_name = "../fonts/" ++ font_name ++ ".fon";
+    const raw = @embedFile(file_name);
+
     const h: *const FONHeader = @alignCast(@ptrCast(raw[0..@sizeOf(FONHeader)]));
     if (!std.mem.eql(u8, &h.magic, fon_header_magic)) @compileError("font missing magic number");
 
@@ -35,6 +39,7 @@ fn read_fon(raw: []const u8) console.FontData {
     const glyph_data: []const bool = @as([*]const bool, @ptrCast(raw[data_offset..]))[0..data_size];
 
     return .{
+        .name = font_name,
         .char_width = h.char_width,
         .char_height = h.char_height,
         .space_width = h.space_width,
@@ -43,5 +48,38 @@ fn read_fon(raw: []const u8) console.FontData {
     };
 }
 
-pub const laggy_8x8 = read_fon(@embedFile("../fonts/laggy8x8.fon"));
-pub const zero_wing_8x8 = read_fon(@embedFile("../fonts/zerowing8x8.fon"));
+pub const laggy_8x8 = read_fon("laggy8x8");
+pub const zero_wing_8x8 = read_fon("zerowing8x8");
+
+const FontList = std.ArrayList(console.FontData);
+var fonts: FontList = undefined;
+
+pub fn initialize(allocator: std.mem.Allocator) !void {
+    fonts = FontList.init(allocator);
+    try fonts.append(laggy_8x8);
+    try fonts.append(zero_wing_8x8);
+
+    try shell.add_command(.{
+        .name = "font",
+        .summary = "list available fonts or change font",
+        .exec = shell_font,
+    });
+}
+
+fn shell_font(_: std.mem.Allocator, args: []const u8) !void {
+    if (args.len == 0) {
+        for (fonts.items) |*font|
+            console.printf("{s}: {d}x{d}, {d} glyphs\n", .{ font.name, font.char_width, font.char_height, font.chars.len });
+        return;
+    }
+
+    for (fonts.items) |*font| {
+        if (std.mem.eql(u8, args, font.name)) {
+            console.set_font(font);
+            console.printf("Changed font to {s}\n", .{font.name});
+            return;
+        }
+    }
+
+    console.printf("No such font: {s}", .{args});
+}

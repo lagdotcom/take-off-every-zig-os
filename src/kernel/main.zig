@@ -7,6 +7,7 @@ const block_device = @import("block_device.zig");
 const console = @import("console.zig");
 const cpuid = @import("cpuid.zig");
 const file_system = @import("file_system.zig");
+const fonts = @import("fonts.zig");
 const gdt = @import("gdt.zig");
 const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig");
@@ -127,6 +128,8 @@ pub fn initialize(p: BootInfo) void {
 
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(fadt_table);
+
+    fonts.initialize(allocator) catch |e| return kernel_init_error("fonts", e);
 
     shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
 

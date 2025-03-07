@@ -230,6 +230,7 @@ fn get_char_data(f: *const FontData, cp: u21) []const bool {
 }
 
 pub const FontData = struct {
+    name: []const u8,
     char_width: u16,
     char_height: u16,
     space_width: u16,
