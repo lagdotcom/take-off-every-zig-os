@@ -32,7 +32,7 @@ const BlockDeviceList = std.ArrayList(BlockDevice);
 
 var block_devices: BlockDeviceList = undefined;
 
-pub fn init(allocator: std.mem.Allocator) !void {
+pub fn initialize(allocator: std.mem.Allocator) !void {
     block_devices = BlockDeviceList.init(allocator);
 
     try shell.add_command(.{

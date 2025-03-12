@@ -49,7 +49,7 @@ const FileSystemList = std.ArrayList(FileSystem);
 
 var file_systems: FileSystemList = undefined;
 
-pub fn init(allocator: std.mem.Allocator) !void {
+pub fn initialize(allocator: std.mem.Allocator) !void {
     file_systems = FileSystemList.init(allocator);
 
     try shell.add_command(.{
