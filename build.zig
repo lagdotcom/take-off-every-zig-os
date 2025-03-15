@@ -149,7 +149,7 @@ pub fn build(b: *std.Build) void {
 
     const display_type = switch (builtin.os.tag) {
         .macos => "cocoa",
-        else => "sdl",
+        else => "gtk",
     };
 
     const qemu_cmd = b.addSystemCommand(&.{

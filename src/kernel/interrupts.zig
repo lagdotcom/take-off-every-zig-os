@@ -276,3 +276,5 @@ pub fn initialize() void {
     setup_idt();
     setup_pic();
 }
+
+pub var nmi_disabled: bool = true;

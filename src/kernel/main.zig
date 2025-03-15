@@ -17,6 +17,7 @@ const pci = @import("pci.zig");
 const ps2 = @import("ps2.zig");
 const serial = @import("serial.zig");
 const shell = @import("shell.zig");
+const time = @import("time.zig");
 const video = @import("video.zig");
 
 pub const BootInfo = struct {
@@ -130,6 +131,8 @@ pub fn initialize(p: BootInfo) void {
     ps2.initialize(fadt_table);
 
     fonts.initialize(allocator) catch |e| return kernel_init_error("fonts", e);
+
+    time.initialize() catch |e| return kernel_init_error("time", e);
 
     shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
 
