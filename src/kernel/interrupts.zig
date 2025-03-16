@@ -138,7 +138,7 @@ fn isrHandler(ctx: *CpuState) usize {
 fn irqHandler(ctx: *CpuState) usize {
     var ret_esp = @intFromPtr(ctx);
 
-    const irq: u8 = @truncate(ctx.int_num - IRQ_START_INDEX);
+    const irq: IRQ = @enumFromInt(ctx.int_num - IRQ_START_INDEX);
     if (interrupt_handlers[ctx.int_num]) |handler| {
         if (!pic.is_spurious(irq)) {
             ret_esp = handler(ctx);
@@ -152,7 +152,7 @@ fn irqHandler(ctx: *CpuState) usize {
 pub export fn interrupt_handler(ctx: *CpuState) usize {
     // ctx.debug();
 
-    if (ctx.int_num > IRQ_START_INDEX) {
+    if (ctx.int_num >= IRQ_START_INDEX) {
         // const irq: IRQ = @enumFromInt(ctx.int_num - IRQ_START_INDEX);
         // log.debug("IRQ: {s}", .{@tagName(irq)});
         return irqHandler(ctx);
@@ -255,8 +255,8 @@ pub fn set_irq_handler(irq: IRQ, handler: InterruptHandler, name: []const u8) vo
 }
 
 fn setup_idt() void {
-    idt_ptr.base = @intFromPtr(&idt[0]);
-    idt_ptr.limit = @sizeOf(IDTEntry32) * MAX_DESCRIPTORS - 1;
+    idt_ptr.base = @intFromPtr(&idt);
+    idt_ptr.limit = @sizeOf(@TypeOf(idt)) - 1;
 
     inline for (0..48) |vector|
         set_descriptor(vector, generate_int_stub(vector), .{ .present = true, .gate_type = if (vector < IRQ_START_INDEX) .trap_32 else .interrupt_32 });
@@ -266,15 +266,15 @@ fn setup_idt() void {
 }
 
 fn setup_pic() void {
-    pic.remap(IRQ_START_INDEX, IRQ_START_INDEX + 8);
+    pic.remap(IRQ_START_INDEX);
 }
 
 pub fn initialize() void {
     log.debug("initializing", .{});
     defer log.debug("done", .{});
 
-    setup_idt();
     setup_pic();
+    setup_idt();
 }
 
 pub var nmi_disabled: bool = true;

@@ -60,17 +60,17 @@ pub fn clear_mask(irq: interrupts.IRQ) void {
     log.debug("clear_mask: port={x} old={x} new={x}", .{ port, old_value, value });
 }
 
-pub fn remap(offset_1: u8, offset_2: u8) void {
+pub fn remap(offset: u8) void {
     send_pic1_icw1(.{ .init = true, .icw4_present = true });
     send_pic2_icw1(.{ .init = true, .icw4_present = true });
 
-    x86.outb(PIC1_DATA, offset_1);
+    x86.outb(PIC1_DATA, offset);
     x86.io_wait();
 
-    x86.outb(PIC2_DATA, offset_2);
+    x86.outb(PIC2_DATA, offset + 8);
     x86.io_wait();
 
-    x86.outb(PIC1_DATA, 4); // PIC2 is at IRQ2
+    x86.outb(PIC1_DATA, 1 << 2); // PIC2 is at IRQ2
     x86.io_wait();
 
     x86.outb(PIC2_DATA, 2); // PIC2 identity = 2
@@ -87,11 +87,11 @@ pub fn remap(offset_1: u8, offset_2: u8) void {
     x86.outb(PIC2_DATA, 0xff);
 }
 
-pub fn eoi(irq: u8) void {
-    if (irq >= 8) send_pic2_icw1(.{ .end_of_interrupt = true });
+pub fn eoi(irq: interrupts.IRQ) void {
+    if (@intFromEnum(irq) >= 8) send_pic2_icw1(.{ .end_of_interrupt = true });
     send_pic1_icw1(.{ .end_of_interrupt = true });
 
-    log.debug("end of interrupt: {d}", .{irq});
+    log.debug("end of interrupt: {s}", .{@tagName(irq)});
 }
 
 fn pic1_isr() u8 {
@@ -104,13 +104,13 @@ fn pic2_isr() u8 {
     return x86.inb(PIC2_COMMAND);
 }
 
-pub fn is_spurious(irq: u8) bool {
+pub fn is_spurious(irq: interrupts.IRQ) bool {
     return switch (irq) {
-        7 => {
+        .lpt1_spurious => {
             if ((pic1_isr() & 0x80) == 0) return true;
             return false;
         },
-        15 => {
+        .secondary_ata => {
             if ((pic2_isr() & 0x80) == 0) {
                 send_pic1_icw1(.{ .end_of_interrupt = true });
                 return true;

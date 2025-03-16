@@ -308,6 +308,7 @@ fn test_bmdma_transfer(secondary_bus: bool, drive_number: ata.DriveNumber) !void
         // (set up for IRQ handling)
         interrupts.set_irq_handler(irq, irq_handler, "piix3_ide_irq_handler");
         pic.clear_mask(irq);
+        pic.clear_mask(.cascade);
 
         // Select the drive.
         // Send the LBA and sector count to their respective ports.
