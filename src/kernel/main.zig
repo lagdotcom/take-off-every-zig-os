@@ -99,7 +99,7 @@ pub fn initialize(p: BootInfo) void {
     ata.initialize() catch |e| return kernel_init_error("ata", e);
     block_device.initialize(allocator) catch |e| return kernel_init_error("block_device", e);
     file_system.initialize(allocator) catch |e| return kernel_init_error("file_system", e);
-    // cpuid.initialize(); TODO convert to shell module
+    cpuid.initialize() catch |e| return kernel_init_error("cpuid", e);
     pci.initialize(allocator) catch |e| return kernel_init_error("pci", e); // relies on ATA, BlockDevice
     file_system.scan(allocator) catch |e| return kernel_init_error("file_system", e); // relies on PCI
 
