@@ -242,7 +242,7 @@ pub fn add(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, b
     if (cluster_count < 4085) {
         // TODO FAT12
     } else if (cluster_count < 65525) {
-        var vol = try FAT16Volume.init(allocator, dev, h.bpb, h.ebpb.fat12_16);
+        var vol = try FAT16Volume.create(allocator, dev, h.bpb, h.ebpb.fat12_16);
         try file_system.add(vol.fs());
     } else {
         // TODO FAT32
@@ -382,7 +382,7 @@ const FAT16Volume = struct {
     first_data_sector: u28,
     first_fat_sector: u28,
 
-    pub fn init(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, original_bpb: *const BPB, original_ebpb: *const EBPB12_16) !*FAT16Volume {
+    pub fn create(allocator: std.mem.Allocator, dev: *const block_device.BlockDevice, original_bpb: *const BPB, original_ebpb: *const EBPB12_16) !*FAT16Volume {
         const bpb = try allocator.create(BPB);
         bpb.* = original_bpb.*;
 

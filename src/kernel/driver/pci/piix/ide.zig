@@ -429,7 +429,7 @@ fn test_pio_transfer(allocator: std.mem.Allocator, secondary_bus: bool, drive_nu
         },
         else => {
             const name = try std.fmt.allocPrint(allocator, "ata{c}{d}", .{ bus.name[0], drive_number });
-            const pio = try PIOBlockDevice.init(allocator, name, &bus, drive_number, identity.maximum_block_transfer);
+            const pio = try PIOBlockDevice.create(allocator, name, &bus, drive_number, identity.maximum_block_transfer);
             try block_device.add(pio.device());
         },
     }
@@ -441,7 +441,7 @@ const PIOBlockDevice = struct {
     drive_number: ata.DriveNumber,
     maximum_block_transfer: u8,
 
-    pub fn init(allocator: std.mem.Allocator, name: []const u8, bus: *const ata.Bus, drive_number: ata.DriveNumber, maximum_block_transfer: u8) !*PIOBlockDevice {
+    pub fn create(allocator: std.mem.Allocator, name: []const u8, bus: *const ata.Bus, drive_number: ata.DriveNumber, maximum_block_transfer: u8) !*PIOBlockDevice {
         const self = try allocator.create(PIOBlockDevice);
         self.name = name;
         self.is_secondary = bus.is_secondary;

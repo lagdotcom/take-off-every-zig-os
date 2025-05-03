@@ -177,7 +177,7 @@ pub const KernelAllocator = struct {
             return;
         }
 
-        log.debug("freed {d} bytes at {x}", .{ entry.addr, entry.reserved });
+        log.debug("freed {d} bytes at {x}", .{ entry.reserved, entry.addr });
         entry.free = true;
         entry.reserved = 0;
 
