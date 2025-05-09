@@ -149,7 +149,7 @@ fn irq_handler(ctx: *interrupts.CpuState) usize {
     // Read the controller and drive status to determine if the transfer completed successfully.
     report_bus_master_status(base, "during interrupt");
 
-    ata.primary.report_status();
+    // ata.primary.report_status();
 
     return @intFromPtr(ctx);
 }
@@ -476,15 +476,15 @@ const PIOBlockDevice = struct {
         while (sectors_left > 0) {
             const sectors_to_read = @min(self.maximum_block_transfer, sectors_left);
 
-            bus.report_status();
+            // bus.report_status();
             bus.set_lba28(next_lba, self.drive_number, sectors_to_read);
             bus.pio_read();
 
-            bus.report_status();
+            // bus.report_status();
             for (0..sectors_to_read) |sector_index| {
-                log.debug("waiting for RDY", .{});
+                // log.debug("waiting for RDY", .{});
                 while (!bus.get_alt_status().data_request) {}
-                bus.report_status();
+                // bus.report_status();
 
                 // TODO replace this with insw
                 for (0..ata.sector_size / 2) |_| {
@@ -500,8 +500,8 @@ const PIOBlockDevice = struct {
             next_lba += sectors_to_read;
         }
 
-        bus.report_status();
-        log.debug("ending lba address = {d}", .{bus.read_final_lba()});
+        // bus.report_status();
+        // log.debug("ending lba address = {d}", .{bus.read_final_lba()});
         return true;
     }
 };

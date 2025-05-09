@@ -91,7 +91,7 @@ pub fn eoi(irq: interrupts.IRQ) void {
     if (@intFromEnum(irq) >= 8) send_pic2_icw1(.{ .end_of_interrupt = true });
     send_pic1_icw1(.{ .end_of_interrupt = true });
 
-    log.debug("end of interrupt: {s}", .{@tagName(irq)});
+    // log.debug("end of interrupt: {s}", .{@tagName(irq)});
 }
 
 fn pic1_isr() u8 {

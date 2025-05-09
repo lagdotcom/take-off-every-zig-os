@@ -523,7 +523,7 @@ pub const Bus = struct {
 
         log.debug("waiting for RDY", .{});
         while (true) {
-            self.report_status();
+            // self.report_status();
             const status = self.get_alt_status();
             if (status.err) return false;
             if (!status.busy and status.data_request) break;
@@ -537,7 +537,7 @@ pub const Bus = struct {
         for (0..sector_count) |s| {
             log.debug("waiting for sector {d}", .{s});
             while (true) {
-                self.report_status();
+                // self.report_status();
                 const status = self.get_alt_status();
                 if (status.err) return false;
                 if (!status.busy and status.data_request) break;
