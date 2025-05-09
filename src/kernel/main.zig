@@ -14,6 +14,7 @@ const KernelAllocator = @import("KernelAllocator.zig");
 const keyboard = @import("keyboard.zig");
 const log_module = @import("log.zig");
 const pci = @import("pci.zig");
+const pit = @import("pit.zig");
 const ps2 = @import("ps2.zig");
 const serial = @import("serial.zig");
 const shell = @import("shell.zig");
@@ -134,7 +135,13 @@ pub fn initialize(p: BootInfo) void {
 
     time.initialize() catch |e| return kernel_init_error("time", e);
 
+    pit.initialize();
+
     shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
 
     std.debug.panic("end of kernel reached", .{});
+}
+
+fn do_nothing(ctx: *interrupts.CpuState) usize {
+    return @intFromPtr(ctx);
 }
