@@ -87,12 +87,21 @@ pub fn get_by_name(name: []const u8) ?FileSystem {
     return null;
 }
 
-fn shell_fs_list(_: std.mem.Allocator, _: []const u8) !void {
-    for (file_systems.items) |sys|
-        console.printf("{s} ({s})\n", .{ sys.name, sys.fs_name });
+fn shell_fs_list(sh: *shell.Context, _: []const u8) !void {
+    var t = try sh.table();
+    defer t.deinit();
+    try t.add_heading(.{ .name = "Name" });
+    try t.add_heading(.{ .name = "File System" });
+
+    for (file_systems.items) |sys| {
+        try t.add_string(sys.name);
+        try t.add_string(sys.fs_name);
+        try t.end_row();
+    }
+    t.print();
 }
 
-fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
+fn shell_fs_dir(sh: *shell.Context, args: []const u8) !void {
     const parts = tools.split_by_whitespace(args);
 
     if (parts[0].len < 1) {
@@ -107,8 +116,8 @@ fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
     }
     const sys = maybe_sys.?;
 
-    const entries = try sys.list_directory(allocator, if (parts[1].len > 0) parts[1] else "/");
-    defer allocator.free(entries);
+    const entries = try sys.list_directory(sh.allocator, if (parts[1].len > 0) parts[1] else "/");
+    defer sh.allocator.free(entries);
 
     if (entries.len == 0) {
         console.printf("no entries found\n", .{});
@@ -117,23 +126,29 @@ fn shell_fs_dir(allocator: std.mem.Allocator, args: []const u8) !void {
         var mtime_buffer: [11]u8 = undefined;
         var size_buffer: [6]u8 = undefined;
 
-        console.set_background_colour(video.rgb(64, 64, 64));
-        console.printf("SIZE    CREATED     MODIFIED    NAME\n", .{});
-        console.set_background_colour(0);
+        var t = try sh.table();
+        defer t.deinit();
+        try t.add_heading(.{ .name = "Size" });
+        try t.add_heading(.{ .name = "Created" });
+        try t.add_heading(.{ .name = "Modified" });
+        try t.add_heading(.{ .name = "Name" });
+
         for (entries) |e| {
             const ctime = if (e.created) |ct| try ct.format_ymd(ctime_buffer[0..11]) else "unknown";
             const mtime = if (e.modified) |mt| try mt.format_ymd(mtime_buffer[0..11]) else "unknown";
 
-            if (e.type == .directory) {
-                console.printf("        {s} {s} {s}/\n", .{ ctime, mtime, e.name });
-            } else {
-                console.printf("{s:7} {s} {s} {s}\n", .{ try tools.nice_size(size_buffer[0..6], e.size), ctime, mtime, e.name });
-            }
+            try t.add_string(if (e.type == .directory) "" else try tools.nice_size(size_buffer[0..6], e.size));
+            try t.add_string(ctime);
+            try t.add_string(mtime);
+            if (e.type == .directory) try t.add_fmt("{s}/", .{e.name}) else try t.add_string(e.name);
+            try t.end_row();
         }
+
+        t.print();
     }
 }
 
-fn shell_fs_read(allocator: std.mem.Allocator, args: []const u8) !void {
+fn shell_fs_read(sh: *shell.Context, args: []const u8) !void {
     const parts = tools.split_by_whitespace(args);
 
     if (parts[0].len < 1 or parts[1].len < 1) {
@@ -148,8 +163,8 @@ fn shell_fs_read(allocator: std.mem.Allocator, args: []const u8) !void {
     }
     const sys = maybe_sys.?;
 
-    const buffer = try sys.read_file(allocator, parts[1]);
-    defer allocator.free(buffer);
+    const buffer = try sys.read_file(sh.allocator, parts[1]);
+    defer sh.allocator.free(buffer);
 
     tools.hex_dump(console.printf_nl, buffer);
 }

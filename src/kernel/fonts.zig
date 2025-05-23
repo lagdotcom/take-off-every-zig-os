@@ -48,16 +48,16 @@ fn read_fon(comptime font_name: []const u8) console.FontData {
     };
 }
 
-pub const laggy_8x8 = read_fon("laggy8x8");
-pub const zero_wing_8x8 = read_fon("zerowing8x8");
+pub const laggy = read_fon("laggy");
+pub const zero_wing = read_fon("zero_wing");
 
 const FontList = std.ArrayList(console.FontData);
 var fonts: FontList = undefined;
 
 pub fn initialize(allocator: std.mem.Allocator) !void {
     fonts = FontList.init(allocator);
-    try fonts.append(laggy_8x8);
-    try fonts.append(zero_wing_8x8);
+    try fonts.append(laggy);
+    try fonts.append(zero_wing);
 
     try shell.add_command(.{
         .name = "font",
@@ -66,10 +66,20 @@ pub fn initialize(allocator: std.mem.Allocator) !void {
     });
 }
 
-fn shell_font(_: std.mem.Allocator, args: []const u8) !void {
+fn shell_font(sh: *shell.Context, args: []const u8) !void {
     if (args.len == 0) {
-        for (fonts.items) |*font|
-            console.printf("{s}: {d}x{d}, {d} glyphs\n", .{ font.name, font.char_width, font.char_height, font.chars.len });
+        var t = try sh.table();
+        try t.add_heading(.{ .name = "Name" });
+        try t.add_heading(.{ .name = "Size" });
+        try t.add_heading(.{ .name = "Glyphs" });
+
+        for (fonts.items) |*font| {
+            try t.add_string(font.name);
+            try t.add_fmt("{d}x{d}", .{ font.char_width, font.char_height });
+            try t.add_number(font.chars.len, 10);
+            try t.end_row();
+        }
+        t.print();
         return;
     }
 

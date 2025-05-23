@@ -726,8 +726,8 @@ fn get_cpu_information(allocator: std.mem.Allocator) !*CPUInfo {
     return cpu;
 }
 
-fn shell_cpuid_command(allocator: std.mem.Allocator, _: []const u8) !void {
-    const cpu = try get_cpu_information(allocator);
+fn shell_cpuid_command(sh: *shell.Context, _: []const u8) !void {
+    const cpu = try get_cpu_information(sh.allocator);
     defer cpu.destroy();
 
     console.printf_nl("'{s}', '{s}', manufacturer guess: {s}", .{ cpu.manufacturer_id, cpu.extended_manufacturer_id, @tagName(cpu.manufacturer) });

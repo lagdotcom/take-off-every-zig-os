@@ -70,12 +70,12 @@ pub fn get_by_name(name: []const u8) ?BlockDevice {
     return null;
 }
 
-fn shell_block_list(_: std.mem.Allocator, _: []const u8) !void {
+fn shell_block_list(_: *shell.Context, _: []const u8) !void {
     for (block_devices.items) |dev|
         console.printf("{s}\n", .{dev.name});
 }
 
-fn shell_block_fs(allocator: std.mem.Allocator, name: []const u8) !void {
+fn shell_block_fs(sh: *shell.Context, name: []const u8) !void {
     const maybe_dev = get_by_name(name);
     if (maybe_dev == null) {
         console.printf("unknown device name: {s}\n", .{name});
@@ -83,8 +83,8 @@ fn shell_block_fs(allocator: std.mem.Allocator, name: []const u8) !void {
     }
     const dev = maybe_dev.?;
 
-    const buffer = try dev.alloc_sector_buffer(allocator, 1);
-    defer allocator.free(buffer);
+    const buffer = try dev.alloc_sector_buffer(sh.allocator, 1);
+    defer sh.allocator.free(buffer);
 
     console.printf("attempting read at lba 0, {d} bytes\n", .{buffer.len});
     if (!dev.read(0, 1, buffer)) {
@@ -99,7 +99,7 @@ fn shell_block_fs(allocator: std.mem.Allocator, name: []const u8) !void {
     try fs.show_info(console.printf_nl, fs_type, buffer, block_devices.allocator, dev);
 }
 
-fn shell_block_read(allocator: std.mem.Allocator, args: []const u8) !void {
+fn shell_block_read(sh: *shell.Context, args: []const u8) !void {
     defer log.debug("shell_block_read: done", .{});
 
     if (args.len < 3) {
@@ -126,8 +126,8 @@ fn shell_block_read(allocator: std.mem.Allocator, args: []const u8) !void {
         },
     };
 
-    const buffer = try dev.alloc_sector_buffer(allocator, 1);
-    defer allocator.free(buffer);
+    const buffer = try dev.alloc_sector_buffer(sh.allocator, 1);
+    defer sh.allocator.free(buffer);
 
     console.printf("attempting read at lba {d}, {d} bytes\n", .{ lba, buffer.len });
     if (!dev.read(lba, 1, buffer)) {

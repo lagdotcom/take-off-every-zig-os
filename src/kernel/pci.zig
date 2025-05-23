@@ -750,10 +750,6 @@ fn show_full_device_info(bus: usize, slot: usize, function: usize, h: DeviceHead
     }
 }
 
-fn show_brief_device_info(bus: usize, slot: usize, function: usize, h: *const DeviceHeader) void {
-    console.printf("{d}:{d}:{d}\t{x:0>4}:{x:0>4}\t{s}\t{s}\n", .{ bus, slot, function, h.vendor_id, h.device_id, get_vendor_name(h.vendor_id), get_device_class(h.class_code, h.subclass, h.programming_interface) });
-}
-
 const AddDeviceError = std.mem.Allocator.Error;
 
 fn add_device(bus: PCIBus, slot: PCISlot, function: PCIFunction) AddDeviceError!*const DeviceHeader {
@@ -812,12 +808,26 @@ fn brute_force_devices() AddDeviceError!void {
     }
 }
 
-fn shell_pci_list(_: std.mem.Allocator, _: []const u8) !void {
-    console.set_background_colour(video.rgb(64, 64, 64));
-    console.puts("Loc.\tVnID:DvID\tVendor\tType\n");
-    console.set_background_colour(0);
+fn shell_pci_list(sh: *shell.Context, _: []const u8) !void {
+    var t = try sh.table();
+    defer t.deinit();
 
-    for (pci_devices.items) |dev| show_brief_device_info(dev.bus, dev.function, dev.slot, dev.header);
+    try t.add_heading(.{ .name = "Loc." });
+    try t.add_heading(.{ .name = "VnID:DvID" });
+    try t.add_heading(.{ .name = "Vendor" });
+    try t.add_heading(.{ .name = "Type" });
+
+    for (pci_devices.items) |dev| {
+        const h = dev.header;
+
+        try t.add_fmt("{d}:{d}:{d}", .{ dev.bus, dev.slot, dev.function });
+        try t.add_fmt("{x:0>4}:{x:0>4}", .{ h.vendor_id, h.device_id });
+        try t.add_string(get_vendor_name(h.vendor_id));
+        try t.add_string(get_device_class(h.class_code, h.subclass, h.programming_interface));
+
+        try t.end_row();
+    }
+    t.print();
 }
 
 pub const DriverStatus = enum(u8) {

@@ -570,26 +570,36 @@ const SECONDARY_COMMAND_BLOCK_OFFSET = 0x170;
 const SECONDARY_CONTROL_BLOCK_OFFSET = 0x376;
 pub const secondary = Bus.init(true, SECONDARY_COMMAND_BLOCK_OFFSET, SECONDARY_CONTROL_BLOCK_OFFSET);
 
-fn shell_ata(_: std.mem.Allocator, _: []const u8) !void {
-    ata_shell_report_status(&primary);
-    ata_shell_report_status(&secondary);
+fn shell_ata(sh: *shell.Context, _: []const u8) !void {
+    var t = try sh.table();
+    try t.add_heading(.{ .name = "Name" });
+    try t.add_heading(.{ .name = "Command" });
+    try t.add_heading(.{ .name = "Control" });
+    try t.add_heading(.{ .name = "Status" });
+
+    try ata_shell_report_status(&t, &primary);
+    try ata_shell_report_status(&t, &secondary);
+    t.print();
 }
 
-fn ata_shell_report_status(bus: *const Bus) void {
+fn ata_shell_report_status(t: *shell.Table, bus: *const Bus) !void {
+    try t.add_string(bus.name);
+    try t.add_number(bus.command, 16);
+    try t.add_number(bus.control, 16);
+
     const status = bus.get_alt_status();
-    console.printf("{s:>9} ata bus @{x}/{x}:{s}{s}{s}{s}{s}{s}{s}{s}\n", .{
-        bus.name,
-        bus.command,
-        bus.control,
-        if (status.err) " ERR" else "",
-        if (status.index) " IDX" else "",
-        if (status.corrected_data) " CORR" else "",
-        if (status.data_request) " DRQ" else "",
-        if (status.drive_seek_complete) " SRV" else "",
-        if (status.drive_write_fault) " DF" else "",
-        if (status.drive_ready) " RDY" else "",
-        if (status.busy) " BSY" else "",
+    try t.add_fmt("{s} {s} {s} {s} {s} {s} {s} {s}", .{
+        if (status.err) "ERR" else "",
+        if (status.index) "IDX" else "",
+        if (status.corrected_data) "CORR" else "",
+        if (status.data_request) "DRQ" else "",
+        if (status.drive_seek_complete) "SRV" else "",
+        if (status.drive_write_fault) "DF" else "",
+        if (status.drive_ready) "RDY" else "",
+        if (status.busy) "BSY" else "",
     });
+
+    try t.end_row();
 }
 
 pub fn initialize() !void {

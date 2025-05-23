@@ -67,9 +67,9 @@ fn cmos_rtc_handler(ctx: *interrupts.CpuState) usize {
     return @intFromPtr(ctx);
 }
 
-fn shell_time(allocator: std.mem.Allocator, _: []const u8) !void {
-    const buffer = try allocator.alloc(u8, 64);
-    defer allocator.free(buffer);
+fn shell_time(sh: *shell.Context, _: []const u8) !void {
+    const buffer = try sh.allocator.alloc(u8, 64);
+    defer sh.allocator.free(buffer);
 
     const formatted = try current_time.format_ymd_hms(buffer);
     console.printf_nl("{s}", .{formatted});

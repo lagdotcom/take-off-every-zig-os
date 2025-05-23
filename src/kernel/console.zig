@@ -22,7 +22,7 @@ pub fn clear() void {
 
     cursor_x = 0;
     cursor_y = 0;
-    set_font(&fonts.zero_wing_8x8);
+    set_font(&fonts.zero_wing);
 }
 
 pub fn set_font(font: *const FontData) void {

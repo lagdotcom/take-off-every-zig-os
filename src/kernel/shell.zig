@@ -8,11 +8,124 @@ const kb = @import("keyboard.zig");
 const tools = @import("tools.zig");
 const video = @import("video.zig");
 
+pub const Context = struct {
+    allocator: std.mem.Allocator,
+
+    pub fn table(self: *Context) !Table {
+        return Table.init(self);
+    }
+};
+
+const str = []const u8;
+
+pub const Table = struct {
+    const Heading = struct {
+        name: str,
+        justify: enum { left, right } = .left,
+        auto_size: bool = true,
+    };
+
+    sh: *Context,
+    headings: std.ArrayList(Heading),
+    sizes: std.ArrayList(usize),
+    row: std.ArrayList(str),
+    rows: std.ArrayList([]str),
+    buffer: []u8,
+    stream: std.io.FixedBufferStream([]u8),
+
+    fn init(sh: *Context) !Table {
+        const buffer = try sh.allocator.alloc(u8, 100);
+        const stream = std.io.fixedBufferStream(buffer);
+
+        return .{
+            .sh = sh,
+            .headings = std.ArrayList(Heading).init(sh.allocator),
+            .sizes = std.ArrayList(usize).init(sh.allocator),
+            .row = std.ArrayList(str).init(sh.allocator),
+            .rows = std.ArrayList([]str).init(sh.allocator),
+            .buffer = buffer,
+            .stream = stream,
+        };
+    }
+
+    pub fn deinit(self: *Table) void {
+        self.sh.allocator.free(self.buffer);
+        self.headings.deinit();
+        self.sizes.deinit();
+        self.row.deinit();
+        self.rows.deinit();
+    }
+
+    pub fn add_heading(self: *Table, heading: Heading) !void {
+        try self.headings.append(.{
+            .name = heading.name,
+            .justify = heading.justify,
+            .auto_size = heading.auto_size,
+        });
+        try self.sizes.append(heading.name.len);
+    }
+
+    pub fn add_string(self: *Table, value: []const u8) !void {
+        const i = self.row.items.len;
+        if (i >= self.headings.items.len) return error.TooManyValuesInRow;
+
+        const h = self.headings.items[i];
+        if (h.auto_size) self.sizes.items[i] = @max(self.sizes.items[i], value.len);
+
+        try self.row.append(try self.sh.allocator.dupe(u8, value));
+    }
+
+    pub fn add_number(self: *Table, value: anytype, base: u8) !void {
+        try std.fmt.formatInt(value, base, .lower, .{}, self.stream.writer());
+        try self.add_string(self.stream.getWritten());
+        self.stream.reset();
+    }
+
+    pub fn add_fmt(self: *Table, comptime fmt: []const u8, args: anytype) !void {
+        try std.fmt.format(self.stream.writer(), fmt, args);
+        try self.add_string(self.stream.getWritten());
+        self.stream.reset();
+    }
+
+    pub fn end_row(self: *Table) !void {
+        const items = try self.row.toOwnedSlice();
+        try self.rows.append(items);
+    }
+
+    pub fn print(self: *Table) void {
+        console.set_background_colour(video.rgb(64, 64, 64));
+        for (self.headings.items, 0..) |h, i| {
+            const sz = self.sizes.items[i];
+            if (i > 0) console.putc(' ');
+
+            if (h.justify == .right) for (0..sz - h.name.len) |_| console.putc(' ');
+            console.puts(h.name);
+            if (h.justify == .left) for (0..sz - h.name.len) |_| console.putc(' ');
+        }
+        console.new_line();
+        console.set_background_colour(0);
+
+        for (self.rows.items) |row| {
+            for (row, 0..) |item, i| {
+                const h = self.headings.items[i];
+                const sz = self.sizes.items[i];
+                if (i > 0) console.putc(' ');
+
+                if (h.justify == .right) for (0..sz - item.len) |_| console.putc(' ');
+                console.puts(item);
+                if (h.justify == .left) for (0..sz - item.len) |_| console.putc(' ');
+            }
+
+            console.new_line();
+        }
+    }
+};
+
 const utf8_less_than = std.sort.asc([]const u8);
 pub const ShellCommand = struct {
     name: []const u8,
     summary: []const u8,
-    exec: ?*const fn (allocator: std.mem.Allocator, args: []const u8) anyerror!void = null,
+    exec: ?*const fn (sh: *Context, args: []const u8) anyerror!void = null,
     sub_commands: ?[]const ShellCommand = null,
 
     fn less_than(_: void, lhs: ShellCommand, rhs: ShellCommand) bool {
@@ -37,7 +150,7 @@ var shell_running = false;
 
 const SHOW_SUBCOMMAND_LIMIT = 3;
 
-fn shell_help(_: std.mem.Allocator, _: []const u8) !void {
+fn shell_help(_: *Context, _: []const u8) !void {
     console.puts("known commands:\n");
     for (shell_commands.items) |cmd| {
         console.putc('\t');
@@ -58,7 +171,7 @@ fn shell_help(_: std.mem.Allocator, _: []const u8) !void {
     }
 }
 
-fn shell_quit(_: std.mem.Allocator, _: []const u8) !void {
+fn shell_quit(_: *Context, _: []const u8) !void {
     console.puts("exiting shell\n");
     shell_running = false;
 }
@@ -135,18 +248,18 @@ fn get_input(buffer: []u8, previous_input: []u8) []u8 {
     }
 }
 
-fn exec_command(allocator: std.mem.Allocator, cmd_line: []const u8, commands: []const ShellCommand) !void {
+fn exec_command(sh: *Context, cmd_line: []const u8, commands: []const ShellCommand) !void {
     const parts = tools.split_by_whitespace(cmd_line);
     log.debug("exec_command: '{s}' '{s}' {d} commands", .{ parts[0], parts[1], commands.len });
 
     for (commands) |cmd| {
         if (std.mem.eql(u8, cmd.name, parts[0])) {
             if (cmd.sub_commands != null and parts[1].len > 0) {
-                return try exec_command(allocator, parts[1], cmd.sub_commands.?);
+                return try exec_command(sh, parts[1], cmd.sub_commands.?);
             }
 
             if (cmd.exec) |exec| {
-                return try exec(allocator, parts[1]);
+                return try exec(sh, parts[1]);
             }
 
             // this only occurs if there are sub commands but no arguments were given
@@ -206,7 +319,8 @@ pub fn enter(allocator: std.mem.Allocator) !void {
         previous_input = previous_input_buffer[0..cmd_line.len];
 
         var arena = std.heap.ArenaAllocator.init(allocator);
-        exec_command(arena.allocator(), cmd_line, shell_commands.items) catch |e| {
+        var context = Context{ .allocator = arena.allocator() };
+        exec_command(&context, cmd_line, shell_commands.items) catch |e| {
             console.set_foreground_colour(err_text);
             console.printf("error: {s}\n", .{@errorName(e)});
         };
