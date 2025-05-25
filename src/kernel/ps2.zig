@@ -3,7 +3,7 @@ const log = std.log.scoped(.ps2);
 
 const acpi = @import("../common/acpi.zig");
 const console = @import("console.zig");
-const mf2_keyboard = @import("driver/io/mf2_keyboard.zig");
+const drivers = @import("driver/ps2.zig");
 const x86 = @import("../arch/x86.zig");
 
 pub const LEDState = packed struct {
@@ -251,7 +251,9 @@ fn has_8042_controller(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) bool {
     return true;
 }
 
-fn identify_device(id: [2]u8) []const u8 {
+pub const DeviceID = [2]u8;
+
+fn identify_device(id: DeviceID) []const u8 {
     return switch (id[0]) {
         0xff => "Ancient AT keyboard",
         0x00 => "Standard PS/2 mouse",
@@ -291,12 +293,36 @@ fn self_test() bool {
     return false;
 }
 
-pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
+pub const PS2Driver = struct {
+    attach: *const fn (allocator: std.mem.Allocator, is_aux: bool) void,
+};
+const PS2DriverMap = std.AutoHashMap(DeviceID, *const PS2Driver);
+pub var ps2_driver_map: PS2DriverMap = undefined;
+
+pub fn add_driver(id: DeviceID, driver: *const PS2Driver) !void {
+    try ps2_driver_map.put(id, driver);
+}
+
+fn start_driver(allocator: std.mem.Allocator, id: DeviceID, is_aux: bool) !void {
+    if (ps2_driver_map.get(id)) |driver| {
+        log.debug("attempting to start driver for {x:0>2}{x:0>2}", .{ id[0], id[1] });
+        driver.attach(allocator, is_aux);
+    } else log.warn("no driver found for {x:0>2}{x:0>2} ({s})", .{ id[0], id[1], identify_device(id) });
+}
+
+pub fn initialize(allocator: std.mem.Allocator, maybe_fadt: ?*acpi.FixedACPIDescriptionTable) !void {
+    log.debug("initializing", .{});
+    defer log.debug("done", .{});
+
     // Step 2: Determine if the PS/2 Controller Exists
     if (!has_8042_controller(maybe_fadt)) {
         log.warn("No 8042 present, not sure how to continue.", .{});
         return;
     }
+
+    // ok, fine, let's initialize things
+    ps2_driver_map = PS2DriverMap.init(allocator);
+    try drivers.initialize();
 
     // Step 3: Disable Devices
     send_command(.disable_main);
@@ -390,7 +416,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
     }
 
     // Step 10: Reset Devices
-    var main_device_id: [2]u8 = .{ 0xff, 0xff };
+    var main_device_id: DeviceID = .{ 0xff, 0xff };
     if (main_ok) {
         send_device_command(.reset);
 
@@ -410,7 +436,7 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
         }
     }
 
-    var aux_device_id: [2]u8 = .{ 0xff, 0xff };
+    var aux_device_id: DeviceID = .{ 0xff, 0xff };
     if (aux_ok) {
         send_command(.write_aux_input);
         send_device_command(.reset);
@@ -476,12 +502,8 @@ pub fn initialize(maybe_fadt: ?*acpi.FixedACPIDescriptionTable) void {
         }
     }
 
-    // TODO make this nicer
-    log.info("main device: {x}{x} ({s})", .{ main_device_id[0], main_device_id[1], identify_device(main_device_id) });
-    if (main_device_id[0] == 0xab and main_device_id[1] == 0x83) mf2_keyboard.initialize(false);
-
-    log.info(" aux device: {x}{x} ({s})", .{ aux_device_id[0], aux_device_id[1], identify_device(aux_device_id) });
-    if (aux_device_id[0] == 0xab and aux_device_id[1] == 0x83) mf2_keyboard.initialize(true);
+    try start_driver(allocator, main_device_id, false);
+    try start_driver(allocator, aux_device_id, true);
 
     // // get current scan code set
     // {

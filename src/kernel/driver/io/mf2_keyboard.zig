@@ -314,7 +314,14 @@ fn kb_irq_handler(ctx: *interrupts.CpuState) usize {
     return @intFromPtr(ctx);
 }
 
-pub fn initialize(is_aux: bool) void {
+pub const id = ps2.DeviceID{ 0xab, 0x83 };
+pub const ps2_driver = ps2.PS2Driver{ .attach = attach_mf2 };
+
+pub fn initialize() !void {
+    try ps2.add_driver(id, &ps2_driver);
+}
+
+fn attach_mf2(_: std.mem.Allocator, is_aux: bool) void {
     log.debug("initializing on {s}", .{if (is_aux) "aux" else "main"});
 
     driver.aux = is_aux;

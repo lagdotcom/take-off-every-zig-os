@@ -129,7 +129,7 @@ pub fn initialize(p: BootInfo) void {
     keyboard.initialize(allocator) catch |e| return kernel_init_error("keyboard", e);
 
     // TODO disable USB legacy support on any controllers before calling this
-    ps2.initialize(fadt_table);
+    ps2.initialize(allocator, fadt_table) catch |e| return kernel_init_error("ps2", e);
 
     fonts.initialize(allocator) catch |e| return kernel_init_error("fonts", e);
 
