@@ -50,13 +50,12 @@ fn on_byte(b: u8) void {
 }
 
 fn key_on(key: kb.Key) void {
-    log.debug("ON: {s}", .{@tagName(key)});
+    // log.debug("ON: {s}", .{@tagName(key)});
     kb.on(key);
-    // TODO fire key event
 }
 
 fn key_off(key: kb.Key) void {
-    log.debug("OFF: {s}", .{@tagName(key)});
+    // log.debug("OFF: {s}", .{@tagName(key)});
     kb.off(key);
 }
 

@@ -126,6 +126,8 @@ pub fn initialize(p: BootInfo) void {
         }
     }
 
+    pit.initialize();
+
     keyboard.initialize(allocator) catch |e| return kernel_init_error("keyboard", e);
 
     // TODO disable USB legacy support on any controllers before calling this
@@ -134,8 +136,6 @@ pub fn initialize(p: BootInfo) void {
     fonts.initialize(allocator) catch |e| return kernel_init_error("fonts", e);
 
     time.initialize() catch |e| return kernel_init_error("time", e);
-
-    pit.initialize();
 
     shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
 

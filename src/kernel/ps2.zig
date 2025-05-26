@@ -118,7 +118,7 @@ fn debug_status(status: StatusRegister) void {
     });
 }
 
-fn get_status() StatusRegister {
+pub fn get_status() StatusRegister {
     const status: StatusRegister = @bitCast(x86.inb(PS2_STATUS_PORT));
     // debug_status(status);
     return status;
@@ -153,7 +153,7 @@ pub fn set_controller_configuration(ccb: ConfigByte) void {
 const io_timeout_attempts = 10;
 
 pub fn send_command(cmd: ControllerCommand) void {
-    log.debug("send_command: {s}", .{@tagName(cmd)});
+    // log.debug("send_command: {s}", .{@tagName(cmd)});
 
     x86.io_wait();
     for (0..io_timeout_attempts) |_| {
@@ -177,7 +177,7 @@ pub fn send_device_command(cmd: DeviceCommand) void {
 }
 
 pub fn send_data(byte: u8) void {
-    log.debug("send_data: {d}/{x}", .{ byte, byte });
+    // log.debug("send_data: {d}/{x}", .{ byte, byte });
 
     x86.io_wait();
     for (0..io_timeout_attempts) |_| {
@@ -194,12 +194,12 @@ pub fn get_data() u8 {
         if (get_status().output_full) {
             x86.io_wait();
             const value = x86.inb(PS2_DATA_PORT);
-            log.debug("get_reply_byte: {d}/{x}", .{ value, value });
+            // log.debug("get_data: {d}/{x}", .{ value, value });
             return value;
         }
     }
 
-    log.warn("timeout on get_reply_byte()", .{});
+    log.warn("timeout on get_data()", .{});
     return 0;
 }
 
@@ -218,7 +218,7 @@ pub fn get_reply() Reply {
     return @enumFromInt(get_data());
 }
 
-fn send_command_and_response(cmd: ControllerCommand) Reply {
+pub fn send_command_get_reply(cmd: ControllerCommand) Reply {
     send_command(cmd);
     var reply = get_reply();
     if (reply != .resend) return reply;
