@@ -13,6 +13,7 @@ const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig");
 const keyboard = @import("keyboard.zig");
 const log_module = @import("log.zig");
+const mouse = @import("mouse.zig");
 const pci = @import("pci.zig");
 const pit = @import("pit.zig");
 const ps2 = @import("ps2.zig");
@@ -20,6 +21,7 @@ const serial = @import("serial.zig");
 const shell = @import("shell.zig");
 const time = @import("time.zig");
 const video = @import("video.zig");
+const viz = @import("viz.zig");
 
 pub const BootInfo = struct {
     memory: []const KernelAllocator.MemoryBlock,
@@ -48,8 +50,8 @@ pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_
 
     kernel_log_fn(.err, .kernel, "!panic! {s}", .{msg});
 
-    console.set_foreground_colour(video.rgb(255, 255, 0));
-    console.set_background_colour(video.rgb(128, 0, 0));
+    console.set_foreground_colour(video.vga.rgb(255, 255, 0));
+    console.set_background_colour(video.vga.rgb(128, 0, 0));
     console.puts("\n!!! KERNEL PANIC !!!\n");
     console.puts(msg);
 
@@ -87,10 +89,10 @@ pub fn initialize(p: BootInfo) void {
     video.initialize(&p.video);
 
     console.initialize();
-    console.set_foreground_colour(video.rgb(255, 255, 0));
+    console.set_foreground_colour(p.video.rgb(255, 255, 0));
     console.puts("Take off every 'ZIG'‼\n\n");
 
-    console.set_foreground_colour(video.rgb(255, 255, 255));
+    console.set_foreground_colour(p.video.rgb(255, 255, 255));
 
     // initialize early so other modules can add their commands to it
     shell.initialize(allocator) catch |e| return kernel_init_error("shell", e);
@@ -129,6 +131,7 @@ pub fn initialize(p: BootInfo) void {
     pit.initialize();
 
     keyboard.initialize(allocator) catch |e| return kernel_init_error("keyboard", e);
+    mouse.initialize(allocator, p.video.horizontal, p.video.vertical) catch |e| return kernel_init_error("mouse", e);
 
     // TODO disable USB legacy support on any controllers before calling this
     ps2.initialize(allocator, fadt_table) catch |e| return kernel_init_error("ps2", e);
@@ -137,7 +140,8 @@ pub fn initialize(p: BootInfo) void {
 
     time.initialize() catch |e| return kernel_init_error("time", e);
 
-    shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
+    // shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
+    viz.enter(allocator) catch |e| log.err("during viz.enter: {s}", .{@errorName(e)});
 
     std.debug.panic("end of kernel reached", .{});
 }

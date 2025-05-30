@@ -4,7 +4,6 @@ const log = std.log.scoped(.pci);
 const console = @import("console.zig");
 const drivers = @import("driver/pci.zig");
 const shell = @import("shell.zig");
-const video = @import("video.zig");
 const x86 = @import("../arch/x86.zig");
 
 const CONFIG_ADDRESS = 0xcf8;

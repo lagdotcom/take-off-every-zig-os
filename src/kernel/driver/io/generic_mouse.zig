@@ -2,6 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.generic_mouse);
 
 const interrupts = @import("../../interrupts.zig");
+const mouse = @import("../../mouse.zig");
 const pic = @import("../../pic.zig");
 const pit = @import("../../pit.zig");
 const ps2 = @import("../../ps2.zig");
@@ -78,6 +79,33 @@ const Packet = struct {
     delta_y: i8,
     delta_z: i8 = 0,
     b4: PacketByte4 = .{},
+
+    pub fn as_update(self: Packet) mouse.MouseUpdate {
+        return .{
+            .buttons = .{ self.b1.left, self.b1.right, self.b1.middle, self.b4.btn4, self.b4.btn5 },
+            .dx = self.delta_x,
+            .dy = -self.delta_y,
+            .dv = self.get_delta_vertical(),
+            .dh = self.get_delta_horizontal(),
+        };
+    }
+
+    pub fn get_delta_vertical(self: Packet) i8 {
+        if (self.delta_z != 0) return self.delta_z;
+        return switch (self.b4.wheel) {
+            .vertical_up => 1,
+            .vertical_down => -1,
+            else => 0,
+        };
+    }
+
+    pub fn get_delta_horizontal(self: Packet) i8 {
+        return switch (self.b4.wheel) {
+            .horizontal_right => 1,
+            .horizontal_left => -1,
+            else => 0,
+        };
+    }
 };
 
 pub const id = ps2.DeviceID{ 0x00, 0xff };
@@ -180,7 +208,8 @@ fn get_mouse_id() void {
 fn mouse_irq_handler(ctx: *interrupts.CpuState) usize {
     if (ps2.get_status().output_full) {
         const p = read_mouse_packet();
-        debug_mouse_packet(p);
+        // debug_mouse_packet(p);
+        mouse.update(p.as_update());
     }
 
     return @intFromPtr(ctx);

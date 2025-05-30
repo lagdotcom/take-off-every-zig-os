@@ -167,12 +167,12 @@ const OutputPlotter = struct {
             .oy = 0,
             .width = width,
             .height = height,
-            .index = video.get_index(sx, sy + height - 1),
+            .index = video.vga.get_index(sx, sy + height - 1),
         };
     }
 
     pub fn plot(self: *OutputPlotter, r: u8, g: u8, b: u8) void {
-        video.plot(self.index, video.rgb(r, g, b));
+        video.vga.plot(self.index, video.vga.rgb(r, g, b));
         self.index += 1;
         self.ox += 1;
     }
@@ -190,6 +190,6 @@ const OutputPlotter = struct {
     }
 
     fn update_index(self: *OutputPlotter) void {
-        self.index = video.get_index(self.sx + self.ox, self.sy + self.height - 1 - self.oy);
+        self.index = video.vga.get_index(self.sx + self.ox, self.sy + self.height - 1 - self.oy);
     }
 };

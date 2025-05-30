@@ -9,7 +9,6 @@ const fs_mbr = @import("driver/fs/mbr.zig");
 const shell = @import("shell.zig");
 const time = @import("time.zig");
 const tools = @import("tools.zig");
-const video = @import("video.zig");
 
 pub const FileSystem = struct {
     ptr: *anyopaque,

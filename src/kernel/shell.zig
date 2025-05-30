@@ -93,7 +93,7 @@ pub const Table = struct {
     }
 
     pub fn print(self: *Table) void {
-        console.set_background_colour(video.rgb(64, 64, 64));
+        console.set_background_colour(video.vga.rgb(64, 64, 64));
         for (self.headings.items, 0..) |h, i| {
             const sz = self.sizes.items[i];
             if (i > 0) console.putc(' ');
@@ -302,9 +302,9 @@ pub fn enter(allocator: std.mem.Allocator) !void {
 
     var previous_input: []u8 = previous_input_buffer[0..0];
 
-    const prompt = video.rgb(255, 255, 0);
-    const text = video.rgb(255, 255, 255);
-    const err_text = video.rgb(255, 192, 0);
+    const prompt = video.vga.rgb(255, 255, 0);
+    const text = video.vga.rgb(255, 255, 255);
+    const err_text = video.vga.rgb(255, 192, 0);
 
     shell_running = true;
     while (shell_running) {

@@ -18,7 +18,7 @@ pub fn initialize() void {
 }
 
 pub fn clear() void {
-    video.fill(0);
+    video.vga.fill(0);
 
     cursor_x = 0;
     cursor_y = 0;
@@ -47,7 +47,7 @@ fn put_char_or_space(c: u21) bool {
         put_font_char(c);
         return true;
     } else {
-        video.fill_rectangle(cursor_x, cursor_y, current_font.space_width, current_font.char_height, bg_colour);
+        video.vga.fill_rectangle(cursor_x, cursor_y, current_font.space_width, current_font.char_height, bg_colour);
         return false;
     }
 }
@@ -63,7 +63,7 @@ pub fn putc(c: u21) void {
         const ex = @min(cursor_x + offset, video.vga.horizontal);
 
         if (ex > cursor_x)
-            video.fill_rectangle(cursor_x, cursor_y, ex - cursor_x, current_font.char_height, bg_colour);
+            video.vga.fill_rectangle(cursor_x, cursor_y, ex - cursor_x, current_font.char_height, bg_colour);
 
         if (ex >= video.vga.horizontal) {
             new_line();
@@ -145,7 +145,7 @@ fn scroll_down() void {
 }
 
 fn put_font_char(c: u21) void {
-    var i = video.get_index(cursor_x, cursor_y);
+    var i = video.vga.get_index(cursor_x, cursor_y);
     const stride = video.vga.pixels_per_scan_line - current_font.char_width;
 
     const cd = get_char_data(current_font, c);
@@ -153,7 +153,7 @@ fn put_font_char(c: u21) void {
     var j: usize = 0;
     for (0..current_font.char_height) |_| {
         for (0..current_font.char_width) |_| {
-            video.plot(i, if (cd[j]) fg_colour else bg_colour);
+            video.vga.plot(i, if (cd[j]) fg_colour else bg_colour);
             i += 1;
             j += 1;
         }
