@@ -24,6 +24,19 @@ pub const VideoInfo = struct {
         self.framebuffer[self.get_index(x, y)] = colour;
     }
 
+    pub fn clip_rectangle(self: VideoInfo, x: usize, y: usize, width: *usize, height: *usize) void {
+        if (x >= self.horizontal or y >= self.vertical) {
+            width.* = 0;
+            height.* = 0;
+            return;
+        }
+
+        const end_x = x + width.*;
+        const end_y = y + height.*;
+        width.* = @min(self.horizontal, end_x) - x;
+        height.* = @min(self.vertical, end_y) - y;
+    }
+
     pub fn fill_rectangle(self: VideoInfo, x: usize, y: usize, width: usize, height: usize, colour: u32) void {
         var index = self.get_index(x, y);
 
@@ -33,11 +46,18 @@ pub const VideoInfo = struct {
         }
     }
 
+    pub fn fill_clipped_rectangle(self: VideoInfo, x: usize, y: usize, width: usize, height: usize, colour: u32) void {
+        var clipped_width = width;
+        var clipped_height = height;
+        self.clip_rectangle(x, y, &clipped_width, &clipped_height);
+        self.fill_rectangle(x, y, clipped_width, clipped_height, colour);
+    }
+
     pub fn fill(self: VideoInfo, colour: u32) void {
         @memset(self.framebuffer[0..self.framebuffer_size], colour);
     }
 
-    pub fn swap(self: VideoInfo, buffer: []u32) void {
+    pub fn copy_from(self: VideoInfo, buffer: []u32) void {
         @memcpy(self.framebuffer, buffer);
     }
 
