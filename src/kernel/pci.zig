@@ -4,6 +4,7 @@ const log = std.log.scoped(.pci);
 const console = @import("console.zig");
 const drivers = @import("driver/pci.zig");
 const shell = @import("shell.zig");
+const tools = @import("tools.zig");
 const x86 = @import("../arch/x86.zig");
 
 const CONFIG_ADDRESS = 0xcf8;
@@ -704,48 +705,48 @@ fn parse_bar(bar: u32) BaseAddressRegister {
     return .{ .io = .{ .base = bar & 0xfffffffc } };
 }
 
-fn show_bar_info(index: usize, bar: u32) void {
+fn show_bar_info(logger: tools.log_function, index: usize, bar: u32) void {
     switch (parse_bar(bar)) {
-        .memory => |mem| log.debug("BAR[{d}]: memory {x} {s} {s}", .{ index, mem.base, @tagName(mem.type), if (mem.prefetchable) "prefetchable" else "" }),
-        .io => |io| log.debug("BAR[{d}]: io {x}", .{ index, io.base }),
+        .memory => |mem| logger("BAR[{d}]: memory {x} {s} {s}", .{ index, mem.base, @tagName(mem.type), if (mem.prefetchable) "prefetchable" else "" }),
+        .io => |io| logger("BAR[{d}]: io {x}", .{ index, io.base }),
     }
 }
 
-fn show_full_device_info(bus: usize, slot: usize, function: usize, h: DeviceHeader) void {
-    log.debug("Location: {d}:{d}:{d}", .{ bus, slot, function });
-    log.debug("Vendor/Device ID: {x:0>4}:{x:0>4} ({s})", .{ h.vendor_id, h.device_id, get_vendor_name(h.vendor_id) });
-    log.debug("Class: {x}:{x}:{x} r{d} ({s})", .{ h.class_code, h.subclass, h.programming_interface, h.revision_id, get_device_class(h.class_code, h.subclass, h.programming_interface) });
-    log.debug("Command: {any}", .{h.command});
-    log.debug("Status: {any}", .{h.status});
-    log.debug("Cache Line Size: {x} -- Latency Timer: {x}", .{ h.cache_line_size, h.latency_timer });
-    log.debug("BIST: {any}", .{h.built_in_self_test});
+fn show_full_device_info(logger: tools.log_function, bus: usize, slot: usize, function: usize, h: *const DeviceHeader) void {
+    logger("Location: {d}:{d}:{d}", .{ bus, slot, function });
+    logger("Vendor/Device ID: {x:0>4}:{x:0>4} ({s})", .{ h.vendor_id, h.device_id, get_vendor_name(h.vendor_id) });
+    logger("Class: {x}:{x}:{x} r{d} ({s})", .{ h.class_code, h.subclass, h.programming_interface, h.revision_id, get_device_class(h.class_code, h.subclass, h.programming_interface) });
+    logger("Command: {any}", .{h.command});
+    logger("Status: {any}", .{h.status});
+    logger("Cache Line Size: {x} -- Latency Timer: {x}", .{ h.cache_line_size, h.latency_timer });
+    logger("BIST: {any}", .{h.built_in_self_test});
 
     if (h.general) |g| {
         inline for (g.base_address_registers, 0..) |bar, i|
-            if (bar > 0) show_bar_info(i, bar);
+            if (bar > 0) show_bar_info(logger, i, bar);
 
-        log.debug("CardBus CIS Pointer: {x}", .{g.card_bus_cis_pointer});
-        log.debug("Subsystem Vendor ID: {x} -- Subsystem ID: {x}", .{ g.subsystem_vendor_id, g.subsystem_id });
-        log.debug("Expansion ROM Base Address: {x}", .{g.expansion_rom_base_address});
-        log.debug("Capabilities Pointer: {x}", .{g.capabilities_pointer});
-        log.debug("Interrupt Line: {x} / Pin: {x}", .{ g.interrupt_line, g.interrupt_pin });
-        log.debug("Min Grant: {x} -- Max Latency: {x}", .{ g.min_grant, g.max_latency });
+        logger("CardBus CIS Pointer: {x}", .{g.card_bus_cis_pointer});
+        logger("Subsystem Vendor ID: {x} -- Subsystem ID: {x}", .{ g.subsystem_vendor_id, g.subsystem_id });
+        logger("Expansion ROM Base Address: {x}", .{g.expansion_rom_base_address});
+        logger("Capabilities Pointer: {x}", .{g.capabilities_pointer});
+        logger("Interrupt Line: {x} / Pin: {x}", .{ g.interrupt_line, g.interrupt_pin });
+        logger("Min Grant: {x} -- Max Latency: {x}", .{ g.min_grant, g.max_latency });
     }
 
     if (h.pci_to_pci_bridge) |b| {
         inline for (b.base_address_registers, 0..) |bar, i|
-            if (bar > 0) show_bar_info(i, bar);
+            if (bar > 0) show_bar_info(logger, i, bar);
 
-        log.debug("BAR: {x} {x}", .{ b.base_address_registers[0], b.base_address_registers[1] });
-        log.debug("Primary Bus: {d} -- Secondary Bus: {d} / Latency: {d} -- Subordinate Bus: {d}", .{ b.primary_bus_number, b.secondary_bus_number, b.secondary_latency_timer, b.subordinate_bus_number });
-        log.debug("Secondary Status: {d}", .{b.secondary_status});
-        log.debug("I/O Base: {x}{x:0>2}, Limit: {x}{x:0>2}", .{ b.io_base_upper_16_bits, b.io_base, b.io_limit_upper_16_bits, b.io_limit });
-        log.debug("Memory Base: {x}, Limit: {x}", .{ b.memory_base, b.memory_limit });
-        log.debug("Prefetchable Memory Base: {x}{x:0>4}, Limit: {x}{x:0>4}", .{ b.prefetchable_base_upper_32_bits, b.prefetchable_memory_base, b.prefetchable_limit_upper_32_bits, b.prefetchable_memory_limit });
-        log.debug("Capability Pointer: {d}", .{b.capabilities_pointer});
-        log.debug("Expansion ROM Base Address: {x}", .{b.expansion_rom_base_address});
-        log.debug("Interrupt Line: {x} / Pin: {x}", .{ b.interrupt_line, b.interrupt_pin });
-        log.debug("Bridge Control: {d}", .{b.bridge_control});
+        logger("BAR: {x} {x}", .{ b.base_address_registers[0], b.base_address_registers[1] });
+        logger("Primary Bus: {d} -- Secondary Bus: {d} / Latency: {d} -- Subordinate Bus: {d}", .{ b.primary_bus_number, b.secondary_bus_number, b.secondary_latency_timer, b.subordinate_bus_number });
+        logger("Secondary Status: {d}", .{b.secondary_status});
+        logger("I/O Base: {x}{x:0>2}, Limit: {x}{x:0>2}", .{ b.io_base_upper_16_bits, b.io_base, b.io_limit_upper_16_bits, b.io_limit });
+        logger("Memory Base: {x}, Limit: {x}", .{ b.memory_base, b.memory_limit });
+        logger("Prefetchable Memory Base: {x}{x:0>4}, Limit: {x}{x:0>4}", .{ b.prefetchable_base_upper_32_bits, b.prefetchable_memory_base, b.prefetchable_limit_upper_32_bits, b.prefetchable_memory_limit });
+        logger("Capability Pointer: {d}", .{b.capabilities_pointer});
+        logger("Expansion ROM Base Address: {x}", .{b.expansion_rom_base_address});
+        logger("Interrupt Line: {x} / Pin: {x}", .{ b.interrupt_line, b.interrupt_pin });
+        logger("Bridge Control: {d}", .{b.bridge_control});
     }
 }
 
@@ -829,6 +830,58 @@ fn shell_pci_list(sh: *shell.Context, _: []const u8) !void {
     t.print();
 }
 
+fn shell_pci_view(sh: *shell.Context, args: []const u8) !void {
+    const a = tools.split_by_something(args, ":");
+    const b = tools.split_by_something(a[1], ":");
+
+    if (a[0].len < 1 or b[0].len < 1 or b[1].len < 1) {
+        sh.warn("Syntax: pci view <Bus:Slot:Function>", .{});
+        return;
+    }
+
+    const bus = std.fmt.parseUnsigned(PCIBus, a[0], 10) catch |err| switch (err) {
+        error.Overflow => {
+            sh.warn("bus number too high\n", .{});
+            return;
+        },
+        error.InvalidCharacter => {
+            sh.warn("could not parse {s} as u8", .{a[0]});
+            return;
+        },
+    };
+
+    const slot = std.fmt.parseUnsigned(PCISlot, b[0], 10) catch |err| switch (err) {
+        error.Overflow => {
+            sh.warn("slot number too high\n", .{});
+            return;
+        },
+        error.InvalidCharacter => {
+            sh.warn("could not parse {s} as u5", .{b[0]});
+            return;
+        },
+    };
+
+    const function = std.fmt.parseUnsigned(PCIFunction, b[1], 10) catch |err| switch (err) {
+        error.Overflow => {
+            sh.warn("function number too high\n", .{});
+            return;
+        },
+        error.InvalidCharacter => {
+            sh.warn("could not parse {s} as u3", .{b[1]});
+            return;
+        },
+    };
+
+    for (pci_devices.items) |dev| {
+        if (dev.bus != bus or dev.slot != slot or dev.function != function) continue;
+
+        show_full_device_info(console.printf_nl, bus, slot, function, dev.header);
+        return;
+    }
+
+    sh.warn("invalid address: {d}:{d}:{d}", .{ bus, slot, function });
+}
+
 pub const DriverStatus = enum(u8) {
     stopped,
     starting,
@@ -859,11 +912,15 @@ pub fn initialize(allocator: std.mem.Allocator) !void {
     try shell.add_command(.{
         .name = "pci",
         .summary = "Get information on PCI devices",
-        .sub_commands = &.{.{
+        .sub_commands = &.{ .{
             .name = "list",
             .summary = "List available PCI devices",
             .exec = shell_pci_list,
-        }},
+        }, .{
+            .name = "view",
+            .summary = "View PCI device info",
+            .exec = shell_pci_view,
+        } },
     });
 
     pci_driver_map = PCIDriverMap.init(allocator);

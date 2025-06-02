@@ -14,6 +14,11 @@ pub const Context = struct {
     pub fn table(self: *Context) !Table {
         return Table.init(self);
     }
+
+    pub fn warn(_: *Context, comptime format: []const u8, args: anytype) void {
+        // TODO colours etc.
+        console.printf(format, args);
+    }
 };
 
 const str = []const u8;
