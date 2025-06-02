@@ -23,6 +23,8 @@ pub const MouseState = struct {
     // changes this frame
     button_down: [MOUSE_BUTTON_COUNT]bool,
     button_up: [MOUSE_BUTTON_COUNT]bool,
+    dx: isize,
+    dy: isize,
     horizontal_wheel: i8,
     vertical_wheel: i8,
 };
@@ -59,20 +61,22 @@ pub fn update(data: MouseUpdate) void {
 
     state.x = update_position(state.x, state.x_minimum, state.x_maximum, data.dx);
     state.y = update_position(state.y, state.y_minimum, state.y_maximum, data.dy);
+    state.dx = data.dx;
+    state.dy = data.dy;
     state.vertical_wheel = data.dv;
     state.horizontal_wheel = data.dh;
 
-    log.debug("update: [{s}{s}{s}{s}{s}] x={d} y={d} dv={d} dh={d}", .{
-        if (state.buttons[0]) "1" else "_",
-        if (state.buttons[1]) "2" else "_",
-        if (state.buttons[2]) "3" else "_",
-        if (state.buttons[3]) "4" else "_",
-        if (state.buttons[4]) "5" else "_",
-        state.x,
-        state.y,
-        state.vertical_wheel,
-        state.horizontal_wheel,
-    });
+    // log.debug("update: [{s}{s}{s}{s}{s}] x={d} y={d} dv={d} dh={d}", .{
+    //     if (state.buttons[0]) "1" else "_",
+    //     if (state.buttons[1]) "2" else "_",
+    //     if (state.buttons[2]) "3" else "_",
+    //     if (state.buttons[3]) "4" else "_",
+    //     if (state.buttons[4]) "5" else "_",
+    //     state.x,
+    //     state.y,
+    //     state.vertical_wheel,
+    //     state.horizontal_wheel,
+    // });
 }
 
 fn update_position(old: usize, min: usize, max: usize, delta: i8) usize {

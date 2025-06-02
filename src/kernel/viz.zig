@@ -27,6 +27,7 @@ const Window = struct {
     size: Size,
     minimum_size: Size = .{ .width = 0, .height = 0 },
     maximum_size: Size = .{ .width = std.math.maxInt(usize), .height = std.math.maxInt(usize) },
+    dirty: bool = true,
 
     pub fn deinit(self: *Window) void {
         for (windows.items, 0..) |match, i| {
@@ -37,12 +38,29 @@ const Window = struct {
             }
         }
     }
+
+    pub fn move_to_front(self: *Window) void {
+        for (windows.items, 0..) |match, i| {
+            if (self.id == match.id) {
+                _ = windows.orderedRemove(i);
+                windows.appendAssumeCapacity(self);
+                self.invalidate();
+                return;
+            }
+        }
+    }
+
+    pub fn invalidate(self: *Window) void {
+        self.dirty = true;
+        needs_redraw = true;
+    }
 };
 
 var windows: std.ArrayList(*Window) = undefined;
 var next_window_id: WindowID = undefined;
 var framebuffer: []u32 = undefined;
 var surface: *video.VideoInfo = undefined;
+var needs_redraw: bool = true;
 
 pub fn enter(allocator: std.mem.Allocator) !void {
     framebuffer = try allocator.alloc(u32, video.vga.framebuffer_size);
@@ -78,18 +96,28 @@ pub fn enter(allocator: std.mem.Allocator) !void {
     try new_window(&win_a);
 
     while (true) {
+        if (!needs_redraw) {
+            if (mouse.state.dx != 0 or mouse.state.dy != 0) needs_redraw = true;
+            if (!needs_redraw) continue;
+        }
+
         @memset(framebuffer, viz_bg);
 
         for (windows.items) |win| {
+            // if (!win.dirty) continue;
+
             surface.fill_clipped_rectangle(win.position.x, win.position.y, win.size.width + chrome.horizontal, win.size.height + chrome.vertical, window_chrome);
             surface.fill_clipped_rectangle(win.position.x + chrome.left, win.position.y + chrome.top, win.size.width, win.size.height, window_bg);
 
             // TODO tell window to draw itself
+
+            win.dirty = false;
         }
 
         draw_mouse_cursor(cursor_fg, 8);
 
         video.vga.copy_from(framebuffer);
+        needs_redraw = false;
     }
 
     win_a.deinit();
@@ -99,16 +127,7 @@ pub fn new_window(win: *Window) !void {
     try windows.append(win);
     win.id = next_window_id;
     next_window_id += 1;
-}
-
-pub fn move_to_front(win: *Window) void {
-    for (windows.items, 0..) |match, i| {
-        if (win.id == match.id) {
-            _ = windows.orderedRemove(i);
-            windows.insertAssumeCapacity(0, win);
-            return;
-        }
-    }
+    needs_redraw = true;
 }
 
 fn draw_mouse_cursor(colour: u32, size: usize) void {
