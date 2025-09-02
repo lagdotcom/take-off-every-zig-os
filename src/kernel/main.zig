@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.kernel);
 
-const acpi = @import("../common/acpi.zig");
+const acpi = @import("acpi.zig");
 const ata = @import("ata.zig");
 const block_device = @import("block_device.zig");
 const console = @import("console.zig");
@@ -105,28 +105,7 @@ pub fn initialize(p: BootInfo) void {
     cpuid.initialize() catch |e| return kernel_init_error("cpuid", e);
     pci.initialize(allocator) catch |e| return kernel_init_error("pci", e); // relies on ATA, BlockDevice
     file_system.scan(allocator) catch |e| return kernel_init_error("file_system", e); // relies on PCI
-
-    var fadt_table: ?*acpi.FixedACPIDescriptionTable = null;
-
-    const tables = acpi.read_acpi_tables(allocator, p.rsdp_entries) catch |e| return kernel_init_error("acpi", e);
-    for (tables) |table| {
-        switch (table) {
-            .fadt => |fadt| {
-                // console.printf("FADT v{d}.{d} e{d} -- len {d}\n", .{ fadt.header.revision, fadt.fadt_minor_version.minor, fadt.fadt_minor_version.errata, fadt.header.length });
-                // console.printf("FACS@{x} DSDT@{x} SMI@{x}\n", .{ fadt.firmware_ctrl, fadt.dsdt, fadt.smi_cmd });
-                // console.printf("IA-PC: {any}\n", .{fadt.ia_pc_boot_arch});
-                // console.printf("features: {any}\n", .{fadt.flags});
-
-                fadt_table = fadt;
-            },
-            .unknown => |_| {
-                // console.printf("unknown table: {s} v{d}\n", .{ unk.signature, unk.revision });
-            },
-            else => {
-                // console.printf("{any}\n", .{table});
-            },
-        }
-    }
+    acpi.initialize(p.rsdp_entries) catch |e| return kernel_init_error("acpi", e);
 
     pit.initialize();
 
@@ -134,14 +113,14 @@ pub fn initialize(p: BootInfo) void {
     mouse.initialize(allocator, p.video.horizontal, p.video.vertical) catch |e| return kernel_init_error("mouse", e);
 
     // TODO disable USB legacy support on any controllers before calling this
-    ps2.initialize(allocator, fadt_table) catch |e| return kernel_init_error("ps2", e);
+    ps2.initialize(allocator, acpi.tables.fadt) catch |e| return kernel_init_error("ps2", e);
 
     fonts.initialize(allocator) catch |e| return kernel_init_error("fonts", e);
 
     time.initialize() catch |e| return kernel_init_error("time", e);
 
-    // shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
-    viz.enter(allocator) catch |e| log.err("during viz.enter: {s}", .{@errorName(e)});
+    shell.enter(allocator) catch |e| log.err("during shell.enter: {s}", .{@errorName(e)});
+    // viz.enter(allocator) catch |e| log.err("during viz.enter: {s}", .{@errorName(e)});
 
     std.debug.panic("end of kernel reached", .{});
 }

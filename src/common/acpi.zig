@@ -70,7 +70,7 @@ pub fn read_xsdt(pointer: usize) !XSDT {
     return .{ .header = header, .entries = entries };
 }
 
-const AddressSpace = enum(u8) {
+pub const AddressSpace = enum(u8) {
     system_memory = 0,
     system_io,
     pci_configuration,
@@ -86,7 +86,7 @@ const AddressSpace = enum(u8) {
     _,
 };
 
-const AccessSize = enum(u8) {
+pub const AccessSize = enum(u8) {
     undefined = 0,
     byte,
     word,
@@ -108,12 +108,65 @@ const MADTFlags = packed struct {
     reserved: u31,
 };
 
+pub const ProcessorLocalAPIC = extern struct {
+    type: u8,
+    length: u8,
+    acpi_processor_uid: u8,
+    apic_id: u8,
+    flags: packed struct {
+        enabled: bool,
+        online_capable: bool,
+        reserved: u30,
+    },
+};
+
+pub const IOAPIC = extern struct {
+    type: u8,
+    length: u8,
+    io_apic_id: u8,
+    reserved: u8,
+    io_apic_address: u32,
+    global_system_interrupt_base: u32,
+};
+
+const MPSINTIFlags = packed struct {
+    polarity: enum(u2) {
+        as_bus = 0,
+        active_high,
+        reserved,
+        active_low,
+    },
+    trigger_mode: enum(u2) {
+        as_bus = 0,
+        edge_triggered,
+        reserved,
+        level_triggered,
+    },
+    reserved: u12,
+};
+
+pub const InterruptSourceOverride = extern struct {
+    type: u8,
+    length: u8,
+    bus: u8,
+    source: u8,
+    global_system_interrupt: u32,
+    flags: MPSINTIFlags,
+};
+
+pub const LocalAPICNMI = extern struct {
+    type: u8,
+    length: u8,
+    acpi_processor_uid: u8,
+    flags: MPSINTIFlags,
+    local_apic_lintn: u8,
+};
+
 pub const MultipleAPICDescriptionTable = extern struct {
     header: DescriptionHeader,
     local_interrupt_controller_address: u32,
     flags: MADTFlags,
-    // TODO
-    // interrupt_controller_structure: []InterruptControllerStructure,
+    // followed by Interrupt Controller structures...
 };
 
 pub const BootErrorRecordTable = extern struct {
@@ -174,6 +227,13 @@ const FACPARMBootArchitectureFlags = packed struct {
     reserved: u14,
 };
 
+const FACPPersistentCPUCaches = enum(u2) {
+    not_reported = 0,
+    not_persistent,
+    persistent,
+    reserved,
+};
+
 const FACPFeatureFlags = packed struct {
     wbinvd: bool,
     wbinvd_flush: bool,
@@ -197,7 +257,8 @@ const FACPFeatureFlags = packed struct {
     force_apic_physical_destination_mode: bool,
     hw_reduced_acpi: bool,
     low_power_s0_idle_capable: bool,
-    reserved: u10,
+    persistent_cpu_caches: FACPPersistentCPUCaches,
+    reserved: u8,
 };
 
 pub const FixedACPIDescriptionTable = extern struct {
@@ -259,34 +320,60 @@ pub const FixedACPIDescriptionTable = extern struct {
     hypervisor_vendor_identity: [8]u8,
 };
 
-pub const ACPITable = union(enum) {
-    madt: *MultipleAPICDescriptionTable,
-    bert: *BootErrorRecordTable,
-    bgrt: *BootGraphicsResourceTable,
-    fadt: *FixedACPIDescriptionTable,
-    unknown: *DescriptionHeader,
+pub const HighPrecisionEventTimer = struct {
+    header: DescriptionHeader,
+    hardware_rev_id: u8,
+    comparator_count: u5,
+    counter_size: u1,
+    reserved: u1,
+    legacy_replacement: u1,
+    pci_vendor_id: u16,
+    address: GenericAddressStructure,
+    hpet_number: u8,
+    minimum_tick: u16,
+    page_protection: u8,
 };
 
-fn read_acpi_table(ptr: usize) ACPITable {
-    const header: *DescriptionHeader = @ptrFromInt(ptr);
+const WindowsEmulatedDeviceFlags = struct {
+    rtc_good: bool,
+    acpi_pm_timer_good: bool,
+    reserved: u30,
+};
 
-    if (std.mem.eql(u8, &header.signature, "APIC")) {
-        return .{ .madt = @ptrFromInt(ptr) };
-    } else if (std.mem.eql(u8, &header.signature, "BERT")) {
-        return .{ .bert = @ptrFromInt(ptr) };
-    } else if (std.mem.eql(u8, &header.signature, "BGRT")) {
-        return .{ .bgrt = @ptrFromInt(ptr) };
-    } else if (std.mem.eql(u8, &header.signature, "FACP")) {
-        return .{ .fadt = @ptrFromInt(ptr) };
+pub const WindowsACPIEmulatedDevices = struct {
+    header: DescriptionHeader,
+    flags: WindowsEmulatedDeviceFlags,
+};
+
+pub const ACPITables = struct {
+    madt: ?*MultipleAPICDescriptionTable = null,
+    bert: ?*BootErrorRecordTable = null,
+    bgrt: ?*BootGraphicsResourceTable = null,
+    fadt: ?*FixedACPIDescriptionTable = null,
+    hpet: ?*HighPrecisionEventTimer = null,
+    waet: ?*WindowsACPIEmulatedDevices = null,
+};
+
+pub fn read_acpi_tables(pointers: []const usize) ACPITables {
+    var tables = ACPITables{};
+
+    for (pointers) |ptr| {
+        const header: *DescriptionHeader = @ptrFromInt(ptr);
+
+        if (std.mem.eql(u8, &header.signature, "APIC")) {
+            tables.madt = @ptrFromInt(ptr);
+        } else if (std.mem.eql(u8, &header.signature, "BERT")) {
+            tables.bert = @ptrFromInt(ptr);
+        } else if (std.mem.eql(u8, &header.signature, "BGRT")) {
+            tables.bgrt = @ptrFromInt(ptr);
+        } else if (std.mem.eql(u8, &header.signature, "FACP")) {
+            tables.fadt = @ptrFromInt(ptr);
+        } else if (std.mem.eql(u8, &header.signature, "HPET")) {
+            tables.hpet = @ptrFromInt(ptr);
+        } else if (std.mem.eql(u8, &header.signature, "WAET")) {
+            tables.waet = @ptrFromInt(ptr);
+        }
     }
-
-    return .{ .unknown = header };
-}
-
-pub fn read_acpi_tables(allocator: std.mem.Allocator, pointers: []const usize) ![]ACPITable {
-    const tables: []ACPITable = try allocator.alloc(ACPITable, pointers.len);
-
-    for (pointers, 0..) |ptr, i| tables[i] = read_acpi_table(ptr);
 
     return tables;
 }
