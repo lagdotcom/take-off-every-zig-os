@@ -100,7 +100,7 @@ pub const GenericAddressStructure = extern struct {
     register_bit_width: u8,
     register_bit_offset: u8,
     access_size: AccessSize,
-    address: u64,
+    address: u64 align(1),
 };
 
 const MADTFlags = packed struct {
@@ -158,7 +158,7 @@ pub const LocalAPICNMI = extern struct {
     type: u8,
     length: u8,
     acpi_processor_uid: u8,
-    flags: MPSINTIFlags,
+    flags: MPSINTIFlags align(1),
     local_apic_lintn: u8,
 };
 
@@ -320,27 +320,36 @@ pub const FixedACPIDescriptionTable = extern struct {
     hypervisor_vendor_identity: [8]u8,
 };
 
-pub const HighPrecisionEventTimer = struct {
-    header: DescriptionHeader,
-    hardware_rev_id: u8,
+const HPETFlags = packed struct {
     comparator_count: u5,
     counter_size: u1,
     reserved: u1,
     legacy_replacement: u1,
+};
+
+const HPETPageProtection = packed struct {
+    protection: enum(u4) { none = 0, @"4kb", @"64kb", _ },
+    reserved: u4,
+};
+
+pub const HighPrecisionEventTimer = extern struct {
+    header: DescriptionHeader,
+    hardware_rev_id: u8,
+    flags: HPETFlags,
     pci_vendor_id: u16,
     address: GenericAddressStructure,
     hpet_number: u8,
-    minimum_tick: u16,
-    page_protection: u8,
+    minimum_tick: u16 align(1),
+    page_protection_and_oem_attribute: HPETPageProtection,
 };
 
-const WindowsEmulatedDeviceFlags = struct {
+const WindowsEmulatedDeviceFlags = packed struct {
     rtc_good: bool,
     acpi_pm_timer_good: bool,
     reserved: u30,
 };
 
-pub const WindowsACPIEmulatedDevices = struct {
+pub const WindowsACPIEmulatedDevices = extern struct {
     header: DescriptionHeader,
     flags: WindowsEmulatedDeviceFlags,
 };

@@ -9,10 +9,13 @@ pub var tables = acpi.ACPITables{};
 
 fn add_entry(t: *shell.Table, e: *acpi.DescriptionHeader) !void {
     try t.add_string(&e.signature);
+    try t.add_number(e.length, 10);
     try t.add_number(e.revision, 10);
     try t.add_string(&e.oem_id);
     try t.add_string(&e.oem_table_id);
     try t.add_number(e.oem_revision, 10);
+    try t.add_string(&e.creator_id);
+    try t.add_number(e.creator_revision, 10);
 
     try t.end_row();
 }
@@ -22,10 +25,13 @@ fn shell_acpi(sh: *shell.Context, _: []const u8) !void {
     defer t.deinit();
 
     try t.add_heading(.{ .name = "Type" });
+    try t.add_heading(.{ .name = "Length" });
     try t.add_heading(.{ .name = "Revision" });
     try t.add_heading(.{ .name = "OEM ID" });
     try t.add_heading(.{ .name = "OEM Table ID" });
     try t.add_heading(.{ .name = "OEM Revision" });
+    try t.add_heading(.{ .name = "Creator ID" });
+    try t.add_heading(.{ .name = "Creator Revision" });
 
     if (tables.madt) |e| try add_entry(&t, &e.header);
     if (tables.bert) |e| try add_entry(&t, &e.header);
@@ -38,10 +44,10 @@ fn shell_acpi(sh: *shell.Context, _: []const u8) !void {
 }
 
 inline fn printf_address(name: []const u8, address: *acpi.GenericAddressStructure) void {
-    console.printf_nl("{s}: {s} {x} - o{d} w{d} {s}", .{
+    console.printf_nl("{s}: {x} {s} - o{d} w{d} {s}", .{
         name,
-        @tagName(address.address_space_id),
         address.address,
+        @tagName(address.address_space_id),
         address.register_bit_offset,
         address.register_bit_width,
         @tagName(address.access_size),
@@ -217,14 +223,14 @@ fn shell_acpi_fadt(_: *shell.Context, _: []const u8) !void {
 fn shell_acpi_hpet(_: *shell.Context, _: []const u8) !void {
     if (tables.hpet) |e| {
         console.printf_nl("hardware_rev_id: {d}", .{e.hardware_rev_id});
-        console.printf_nl("comparator_count: {d}", .{e.comparator_count});
-        console.printf_nl("counter_size: {d}", .{e.counter_size});
-        console.printf_nl("legacy_replacement: {d}", .{e.legacy_replacement});
+        console.printf_nl("comparator_count: {d}", .{e.flags.comparator_count});
+        console.printf_nl("counter_size: {d}", .{e.flags.counter_size});
+        console.printf_nl("legacy_replacement: {d}", .{e.flags.legacy_replacement});
         console.printf_nl("pci_vendor_id: {x}", .{e.pci_vendor_id});
         printf_address("address", &e.address);
         console.printf_nl("hpet_number: {d}", .{e.hpet_number});
         console.printf_nl("minimum_tick: {d}", .{e.minimum_tick});
-        console.printf_nl("page_protection: {d}", .{e.page_protection});
+        console.printf_nl("page_protection: {s}", .{@tagName(e.page_protection_and_oem_attribute.protection)});
     } else return error.RecordNotFound;
 }
 
