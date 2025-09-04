@@ -9,6 +9,7 @@ const cpuid = @import("cpuid.zig");
 const file_system = @import("file_system.zig");
 const fonts = @import("fonts.zig");
 const gdt = @import("gdt.zig");
+const hpet = @import("hpet.zig");
 const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig");
 const keyboard = @import("keyboard.zig");
@@ -106,6 +107,7 @@ pub fn initialize(p: BootInfo) void {
     pci.initialize(allocator) catch |e| return kernel_init_error("pci", e); // relies on ATA, BlockDevice
     file_system.scan(allocator) catch |e| return kernel_init_error("file_system", e); // relies on PCI
     acpi.initialize(p.rsdp_entries) catch |e| return kernel_init_error("acpi", e);
+    hpet.initialize(acpi.tables.hpet) catch |e| return kernel_init_error("hpet", e);
 
     pit.initialize();
 
