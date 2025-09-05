@@ -7,7 +7,7 @@ pub const MemoryBlock = struct { addr: usize, size: usize };
 
 const entry_magic_number: u32 = 0xfeed2dad;
 
-const Entry = struct {
+pub const Entry = struct {
     magic: u32,
     free: bool,
     addr: usize,

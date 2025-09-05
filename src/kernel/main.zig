@@ -14,6 +14,7 @@ const interrupts = @import("interrupts.zig");
 const KernelAllocator = @import("KernelAllocator.zig");
 const keyboard = @import("keyboard.zig");
 const log_module = @import("log.zig");
+const mem = @import("mem.zig");
 const mouse = @import("mouse.zig");
 const pci = @import("pci.zig");
 const pit = @import("pit.zig");
@@ -98,6 +99,7 @@ pub fn initialize(p: BootInfo) void {
     // initialize early so other modules can add their commands to it
     shell.initialize(allocator) catch |e| return kernel_init_error("shell", e);
 
+    mem.initialize(&kalloc) catch |e| return kernel_init_error("mem", e);
     gdt.initialize();
     interrupts.initialize();
     ata.initialize() catch |e| return kernel_init_error("ata", e);
