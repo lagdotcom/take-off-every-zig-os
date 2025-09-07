@@ -64,7 +64,7 @@ const size_prefix_list = " KMGTPEZY";
 pub fn nice_size(buffer: []u8, size: u64) ![]u8 {
     var multiple = size;
     for (size_prefix_list) |prefix| {
-        if (multiple < 1000) return std.fmt.bufPrint(buffer, "{d:4}{c}B", .{ multiple, prefix });
+        if (multiple < 1024) return std.fmt.bufPrint(buffer, "{d:4}{c}B", .{ multiple, prefix });
         multiple /= 1024;
     }
 

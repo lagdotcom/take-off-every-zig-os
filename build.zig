@@ -208,6 +208,12 @@ pub fn build(b: *std.Build) void {
         qemu_cmd.addArg(log);
     }
 
+    const memory_option = b.option([]const u8, "m", "qemu memory option");
+    if (memory_option) |m| {
+        qemu_cmd.addArg("-m");
+        qemu_cmd.addArg(m);
+    }
+
     const qemu_step = b.step("qemu", "Run on qemu");
     qemu_step.dependOn(&qemu_cmd.step);
 
