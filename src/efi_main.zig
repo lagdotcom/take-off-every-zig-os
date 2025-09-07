@@ -4,6 +4,7 @@ const L = std.unicode.utf8ToUtf16LeStringLiteral;
 
 const acpi = @import("common/acpi.zig");
 const kernel = @import("kernel/main.zig");
+const mem_types = @import("kernel/allocators/types.zig");
 
 pub const std_options = .{ .log_level = .debug, .logFn = kernel.kernel_log_fn };
 
@@ -143,7 +144,7 @@ pub fn main() uefi.Status {
     printer.print("framebuffer: @{x}+{x}, {d}x{d}, {d} per line, format={s}\r\n", .{ video.framebuffer_addr, video.framebuffer_size, video.horizontal, video.vertical, video.pixels_per_scan_line, @tagName(gfx.mode.info.pixel_format) });
 
     // get space for our memory block list
-    const memory = allocator.alloc(kernel.MemoryBlock, mem_block_count) catch return .OutOfResources;
+    const memory = allocator.alloc(mem_types.MemoryBlock, mem_block_count) catch return .OutOfResources;
 
     // get the latest memory map
     while (boot.getMemoryMap(&map_size, @ptrCast(map_block), &map_key, &descriptor_size, &descriptor_version) != .Success) {

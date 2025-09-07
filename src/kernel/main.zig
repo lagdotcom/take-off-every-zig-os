@@ -11,7 +11,6 @@ const fonts = @import("fonts.zig");
 const gdt = @import("gdt.zig");
 const hpet = @import("hpet.zig");
 const interrupts = @import("interrupts.zig");
-const KernelAllocator = @import("KernelAllocator.zig");
 const keyboard = @import("keyboard.zig");
 const log_module = @import("log.zig");
 const mem = @import("mem.zig");
@@ -25,17 +24,20 @@ const time = @import("time.zig");
 const video = @import("video.zig");
 const viz = @import("viz.zig");
 
+const mem_types = @import("allocators/types.zig");
+// pub const KernelAllocator = @import("allocators/SimpleAllocator.zig");
+pub const KernelAllocator = @import("allocators/BitmapAllocator.zig");
+
 pub const BootInfo = struct {
-    memory: []const KernelAllocator.MemoryBlock,
+    memory: []const mem_types.MemoryBlock,
     video: video.VideoInfo,
     rsdp_entries: []const usize,
 };
 
-pub const MemoryBlock = KernelAllocator.MemoryBlock;
 pub const VideoInfo = video.VideoInfo;
 
 var boot_info: BootInfo = undefined;
-var kalloc: KernelAllocator.KernelAllocator = undefined;
+var kalloc: KernelAllocator = undefined;
 var allocator: std.mem.Allocator = undefined;
 
 pub fn kernel_log_fn(
@@ -84,7 +86,7 @@ pub fn initialize(p: BootInfo) void {
     const com1 = serial.initialize(serial.COM1) catch |e| return kernel_init_error("serial", e);
     log_module.initialize(com1);
 
-    kalloc = KernelAllocator.KernelAllocator.init(p.memory);
+    kalloc = KernelAllocator.init(p.memory);
     allocator = kalloc.allocator();
 
     // get something on the screen lol

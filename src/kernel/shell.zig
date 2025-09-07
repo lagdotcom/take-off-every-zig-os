@@ -86,6 +86,11 @@ pub const Table = struct {
         self.stream.reset();
     }
 
+    pub fn add_size(self: *Table, value: u64) !void {
+        const size = try tools.nice_size(self.buffer, value);
+        try self.add_string(size);
+    }
+
     pub fn add_fmt(self: *Table, comptime fmt: []const u8, args: anytype) !void {
         try std.fmt.format(self.stream.writer(), fmt, args);
         try self.add_string(self.stream.getWritten());
